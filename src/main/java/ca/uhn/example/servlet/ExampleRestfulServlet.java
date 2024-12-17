@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import ca.uhn.example.provider.OrganizationResourceProvider;
+import ca.uhn.example.provider.PatientJsonParser;
 import ca.uhn.example.provider.PatientResourceProvider;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
@@ -12,10 +13,24 @@ import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
 
+import ca.uhn.example.service.PatientService;
+
 /**
  * This servlet is the actual FHIR server itself
  */
 public class ExampleRestfulServlet extends RestfulServer {
+
+	public static void main(String[] args) {
+		PatientService patientService = new PatientService();
+
+		// Teste den Aufruf mit einer gültigen Patient-ID
+		String response = patientService.fetchPatientById("1110");
+
+		System.out.println("FHIR Patient Data:");
+		PatientJsonParser.parsePatientData(response);
+		System.out.println("DEBUG Json File:");
+		System.out.println(response);
+	}
 
 	private static final long serialVersionUID = 1L;
 
