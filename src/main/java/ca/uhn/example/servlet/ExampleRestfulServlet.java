@@ -2,6 +2,7 @@ package ca.uhn.example.servlet;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 import ca.uhn.example.provider.OrganizationResourceProvider;
 import ca.uhn.example.provider.PatientJsonParser;
@@ -23,8 +24,21 @@ public class ExampleRestfulServlet extends RestfulServer {
 	public static void main(String[] args) {
 		PatientService patientService = new PatientService();
 
-		// Teste den Aufruf mit einer gültigen Patient-ID
-		String response = patientService.fetchPatientById("1110");
+		// Patient-ID dynamisch eingeben
+		String patientId;
+		if (args.length > 0) {
+			// Verwende die Patient-ID aus den Programargumenten
+			patientId = args[0];
+		} else {
+			// Frage die Patient-ID über die Konsole ab
+			Scanner scanner = new Scanner(System.in);
+			System.out.print("Bitte geben Sie die Patient-ID ein: ");
+			patientId = scanner.nextLine();
+			scanner.close();
+		}
+
+		// Teste den Aufruf mit der angegebenen Patient-ID
+		String response = patientService.fetchPatientById(patientId);
 
 		System.out.println("FHIR Patient Data:");
 		PatientJsonParser.parsePatientData(response);
