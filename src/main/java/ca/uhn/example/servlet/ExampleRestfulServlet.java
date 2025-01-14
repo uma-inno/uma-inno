@@ -17,7 +17,7 @@ import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
  */
 public class ExampleRestfulServlet extends RestfulServer {
 
-	public static void main(String[] args) {
+	public static void fetchOrganizationByID(String[] args) {
 		OrganizationResourceProvider organizationProvider = new OrganizationResourceProvider();
 
 		// Organisation-ID dynamisch eingeben
