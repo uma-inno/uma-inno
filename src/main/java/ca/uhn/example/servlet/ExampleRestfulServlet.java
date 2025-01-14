@@ -22,6 +22,10 @@ import ca.uhn.example.service.PatientService;
 public class ExampleRestfulServlet extends RestfulServer {
 
 	public static void main(String[] args) {
+		fetchPatientWithID(args);
+	}
+
+	public static void fetchPatientWithID(String[] args) {
 		PatientService patientService = new PatientService();
 
 		// Patient-ID dynamisch eingeben
@@ -38,12 +42,17 @@ public class ExampleRestfulServlet extends RestfulServer {
 		}
 
 		// Teste den Aufruf mit der angegebenen Patient-ID
-		String response = patientService.fetchPatientById(patientId);
+		try {
+    		String response = patientService.fetchPatientById(patientId);
 
-		System.out.println("FHIR Patient Data:");
-		PatientJsonParser.parsePatientData(response);
-		System.out.println("DEBUG Json File:");
-		System.out.println(response);
+			System.out.println("FHIR Patient Data:");
+			PatientJsonParser.parsePatientData(response);
+			System.out.println("DEBUG Json File:");
+			System.out.println(response);
+		} catch (Exception e) {
+			System.err.println("An error occurred while fetching or processing the patient data: " + e.getMessage());
+			e.printStackTrace();
+		}
 	}
 
 	private static final long serialVersionUID = 1L;
