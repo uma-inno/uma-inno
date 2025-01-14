@@ -12,6 +12,8 @@ import org.hl7.fhir.r5.model.Enumerations.AdministrativeGender;
 import org.hl7.fhir.r5.model.*;
 import org.hl7.fhir.r5.model.OperationOutcome.IssueSeverity;
 
+import ca.uhn.example.client.RestClient;
+
 import java.util.*;
 
 /**
@@ -19,6 +21,21 @@ import java.util.*;
  * but it is useful to help illustrate how to build a fully-functional server.
  */
 public class PatientResourceProvider implements IResourceProvider {
+
+   private static final String BASE_URL = "https://hapi.fhir.org/baseR5/Patient";
+
+   public String getPatientById(String patientId) {
+      try {
+         String endpoint = BASE_URL + "/" + patientId;
+         return RestClient.sendRequest(endpoint);
+      } catch (Exception e) {
+         return handleError(e);
+      }
+   }
+
+   private String handleError(Exception e) {
+      return "{ \"error\": \"" + e.getMessage() + "\" }";
+   }
 
    /**
     * This map has a resource ID as a key, and each key maps to a Deque list containing all versions of the resource with that ID.
