@@ -45,8 +45,6 @@ public class ExampleRestfulServlet extends RestfulServer {
 
 		System.out.println("FHIR Allergy Data:");
 		AllergyJsonParser.parseAllergyData(response);
-		System.out.println("DEBUG Json File:");
-		System.out.println(response);
 	}
 
 	private static final long serialVersionUID = 1L;
