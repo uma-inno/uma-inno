@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import ca.uhn.example.interceptor.KeycloakAuthInterceptor;
 import ca.uhn.example.provider.OrganizationResourceProvider;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
@@ -78,5 +79,12 @@ public class ExampleRestfulServlet extends RestfulServer {
 		 * Use nice coloured HTML when a browser is used to request the content
 		 */
 		registerInterceptor(new ResponseHighlighterInterceptor());
+
+
+		/*
+		 * Register the Keycloak Authentication Interceptor
+		 * This will validate incoming requests using Keycloak
+		 */
+		registerInterceptor(new KeycloakAuthInterceptor());
 	}
 }
