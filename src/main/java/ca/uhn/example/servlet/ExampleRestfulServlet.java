@@ -4,10 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+import ca.uhn.example.provider.AllergyJsonParser;
 import ca.uhn.example.interceptor.KeycloakAuthInterceptor;
 import ca.uhn.example.provider.OrganizationResourceProvider;
 import ca.uhn.example.provider.PatientJsonParser;
 import ca.uhn.example.provider.PatientResourceProvider;
+import ca.uhn.example.service.AllergyService;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
@@ -18,15 +20,51 @@ import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
 
 import ca.uhn.example.service.PatientService;
 
+
+private static final long serialVersionUID = 1L;
 /**
  * This servlet is the actual FHIR server itself
  */
-public class ExampleRestfulServlet extends RestfulServer {
 
+
+
+public class ExampleRestfulServlet extends RestfulServer {
+  
+  
+  /**
+	 * Constructor
+	 */
+	public ExampleRestfulServlet() {
+		super(FhirContext.forR5Cached()); // This is an R5 server
+	}
+
+	public static void fetchAllergyById(String[] args) {
+		AllergyService allergyService = new AllergyService();
+
+		// Allergy-ID dynamisch eingeben
+		String allergyId;
+		if (args.length > 0) {
+			// Verwende die Allergy-ID aus den Programargumenten
+			allergyId = args[0];
+		} else {
+			// Frage die Allergy-ID über die Konsole ab
+			Scanner scanner = new Scanner(System.in);
+			System.out.print("Bitte geben Sie die Allergy-ID ein: ");
+			allergyId = scanner.nextLine();
+			scanner.close();
+		}
+
+		// Teste den Aufruf mit der angegebenen Allergy-ID
+		String response = allergyService.fetchAllergyById(allergyId);
+
+		System.out.println("FHIR Allergy Data:");
+		AllergyJsonParser.parseAllergyData(response);
+  }
 
 	public static void main(String[] args) {
 		fetchPatientWithID(args);
-    fetchOrganizationByID(args)
+    fetchOrganizationByID(args);
+    fetchAllergyById(args);
 	}
 
 	public static void fetchPatientWithID(String[] args) {
@@ -86,14 +124,9 @@ public class ExampleRestfulServlet extends RestfulServer {
 		}
 	}
 
-	private static final long serialVersionUID = 1L;
+	
 
-	/**
-	 * Constructor
-	 */
-	public ExampleRestfulServlet() {
-		super(FhirContext.forR5Cached()); // This is an R5 server
-	}
+	
 
 	/**
 	 * This method is called automatically when the
