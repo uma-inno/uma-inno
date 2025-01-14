@@ -1,66 +1,83 @@
 package ca.uhn.example.provider;
 
-import ca.uhn.example.model.MyOrganization;
+import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.parser.IParser;
 import ca.uhn.fhir.rest.annotation.IdParam;
 import ca.uhn.fhir.rest.annotation.Read;
 import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
-import org.hl7.fhir.r5.model.*;
-import org.hl7.fhir.r5.model.ContactPoint.ContactPointUse;
+import org.hl7.fhir.instance.model.api.IBaseOperationOutcome;
+import org.hl7.fhir.r5.model.IdType;
+import org.hl7.fhir.r5.model.Organization;
 
-/**
- * This is a simple resource provider which only implements "read/GET" methods, but
- * which uses a custom subclassed resource definition to add statically bound
- * extensions.
- * <p>l
- * See the MyOrganization definition to see how the custom resource
- * definition works.
- */
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Scanner;
+
 public class OrganizationResourceProvider implements IResourceProvider {
 
-   /**
-    * The getResourceType method comes from IResourceProvider, and must be overridden to indicate what type of resource this provider supplies.
-    */
+   private static final String BASE_URL = "https://hapi.fhir.org/baseR5/Organization";
+
+   private final FhirContext fhirContext;
+
+   public OrganizationResourceProvider() {
+      this.fhirContext = FhirContext.forR5();
+   }
+
    @Override
-   public Class<MyOrganization> getResourceType() {
-      return MyOrganization.class;
+   public Class<Organization> getResourceType() {
+      return Organization.class;
    }
 
    /**
-    * The "@Read" annotation indicates that this method supports the read operation. It takes one argument, the Resource type being returned.
-    *
-    * @param theId The read operation takes one parameter, which must be of type IdDt and must be annotated with the "@Read.IdParam" annotation.
-    * @return Returns a resource matching this identifier, or null if none exists.
+    * Fetch an Organization by ID from a remote HAPI FHIR server
     */
-   @Read()
-   public MyOrganization getResourceById(@IdParam IdType theId) {
+   @Read
+   public Organization getResourceById(@IdParam IdType theId) {
+      String resourceId = theId.getValue();
+      String url = BASE_URL + "/" + resourceId;
 
-      /*
-       * We only support one organization, so the follwing
-       * exception causes an HTTP 404 response if the
-       * ID of "1" isn't used.
-       */
-      if (!"1".equals(theId.getValue())) {
-         throw new ResourceNotFoundException(theId);
+      try {
+         // HTTP GET request to fetch the organization
+         String response = fetchResourceFromRemote(url);
+
+         // Parse the JSON response into an Organization resource
+         IParser parser = fhirContext.newJsonParser();
+         Organization organization = parser.parseResource(Organization.class, response);
+
+         // Add additional logging or transformations if needed
+         System.out.println("Fetched Organization: " + organization.getName());
+         return organization;
+
+      } catch (IOException e) {
+         throw new ResourceNotFoundException("Could not fetch Organization with ID: " + resourceId, (IBaseOperationOutcome) e);
+      }
+   }
+
+   /**
+    * Fetch resource from the remote HAPI FHIR server
+    *
+    * @param url The URL to the resource
+    * @return The response body as a String
+    * @throws IOException If an error occurs during the HTTP request
+    */
+   private String fetchResourceFromRemote(String url) throws IOException {
+      HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+      connection.setRequestMethod("GET");
+      connection.setRequestProperty("Accept", "application/fhir+json");
+
+      int responseCode = connection.getResponseCode();
+      if (responseCode != 200) {
+         throw new IOException("Failed to fetch resource. HTTP error code: " + responseCode);
       }
 
-      MyOrganization retVal = new MyOrganization();
-      retVal.setId("1");
-      retVal.addIdentifier().setSystem("urn:example:orgs").setValue("FooOrganization");
-      retVal.addContact().getAddress().addLine("123 Fake Street").setCity("Toronto");
-      retVal.addContact().getTelecomFirstRep().setUse(ContactPointUse.WORK).setValue("1-888-123-4567");
-
-      // Populate the first, primitive extension
-      retVal.setBillingCode(new CodeType("00102-1"));
-
-      // The second extension is repeatable and takes a block type
-      MyOrganization.EmergencyContact contact = new MyOrganization.EmergencyContact();
-      contact.setActive(new BooleanType(true));
-      contact.setContact(new ContactPoint());
-      retVal.getEmergencyContact().add(contact);
-
-      return retVal;
+      try (Scanner scanner = new Scanner(connection.getInputStream())) {
+         StringBuilder response = new StringBuilder();
+         while (scanner.hasNext()) {
+            response.append(scanner.nextLine());
+         }
+         return response.toString();
+      }
    }
-
-
 }

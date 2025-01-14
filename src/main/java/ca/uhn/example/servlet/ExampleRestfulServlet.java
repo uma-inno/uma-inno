@@ -2,9 +2,9 @@ package ca.uhn.example.servlet;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 import ca.uhn.example.provider.OrganizationResourceProvider;
-import ca.uhn.example.provider.PatientResourceProvider;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
 import ca.uhn.fhir.narrative.INarrativeGenerator;
@@ -17,6 +17,33 @@ import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
  */
 public class ExampleRestfulServlet extends RestfulServer {
 
+	public static void fetchOrganizationByID(String[] args) {
+		OrganizationResourceProvider organizationProvider = new OrganizationResourceProvider();
+
+		// Organisation-ID dynamisch eingeben
+		String organizationId;
+		if (args.length > 0) {
+			// Verwende die Organisation-ID aus den Programargumenten
+			organizationId = args[0];
+		} else {
+			// Frage die Organisation-ID über die Konsole ab
+			Scanner scanner = new Scanner(System.in);
+			System.out.print("Bitte geben Sie die Organisation-ID ein: ");
+			organizationId = scanner.nextLine();
+			scanner.close();
+		}
+
+		// Teste den Aufruf mit der angegebenen Organisation-ID
+		try {
+			String response = organizationProvider.getResourceById(new org.hl7.fhir.r5.model.IdType(organizationId)).toString();
+
+			System.out.println("FHIR Organization Data:");
+			System.out.println(response);
+		} catch (Exception e) {
+			System.err.println("Fehler beim Abrufen der Organisation: " + e.getMessage());
+		}
+	}
+
 	private static final long serialVersionUID = 1L;
 
 	/**
@@ -25,7 +52,7 @@ public class ExampleRestfulServlet extends RestfulServer {
 	public ExampleRestfulServlet() {
 		super(FhirContext.forR5Cached()); // This is an R5 server
 	}
-	
+
 	/**
 	 * This method is called automatically when the
 	 * servlet is initializing.
@@ -33,16 +60,14 @@ public class ExampleRestfulServlet extends RestfulServer {
 	@Override
 	public void initialize() {
 		/*
-		 * Two resource providers are defined. Each one handles a specific
-		 * type of resource.
+		 * Define resource providers, including OrganizationResourceProvider.
 		 */
 		List<IResourceProvider> providers = new ArrayList<>();
-		providers.add(new PatientResourceProvider());
 		providers.add(new OrganizationResourceProvider());
 		setResourceProviders(providers);
-		
+
 		/*
-		 * Use a narrative generator. This is a completely optional step, 
+		 * Use a narrative generator. This is a completely optional step,
 		 * but can be useful as it causes HAPI to generate narratives for
 		 * resources which don't otherwise have one.
 		 */
@@ -53,7 +78,5 @@ public class ExampleRestfulServlet extends RestfulServer {
 		 * Use nice coloured HTML when a browser is used to request the content
 		 */
 		registerInterceptor(new ResponseHighlighterInterceptor());
-		
 	}
-
 }
