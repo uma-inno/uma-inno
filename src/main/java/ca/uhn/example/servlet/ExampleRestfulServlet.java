@@ -20,10 +20,6 @@ import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
  */
 public class ExampleRestfulServlet extends RestfulServer {
 
-	public static void main(String[] args) {
-		fetchAllergyById(args);
-	}
-
 	public static void fetchAllergyById(String[] args) {
 		AllergyService allergyService = new AllergyService();
 
