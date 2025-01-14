@@ -6,6 +6,9 @@ import java.util.Scanner;
 
 import ca.uhn.example.interceptor.KeycloakAuthInterceptor;
 import ca.uhn.example.provider.OrganizationResourceProvider;
+import ca.uhn.example.provider.PatientJsonParser;
+import ca.uhn.example.provider.PatientResourceProvider;
+
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
 import ca.uhn.fhir.narrative.INarrativeGenerator;
@@ -13,10 +16,47 @@ import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
 
+import ca.uhn.example.service.PatientService;
+
 /**
  * This servlet is the actual FHIR server itself
  */
 public class ExampleRestfulServlet extends RestfulServer {
+
+
+	public static void main(String[] args) {
+		fetchPatientWithID(args);
+    fetchOrganizationByID(args)
+	}
+
+	public static void fetchPatientWithID(String[] args) {
+		PatientService patientService = new PatientService();
+
+		// Patient-ID dynamisch eingeben
+		String patientId;
+		if (args.length > 0) {
+			// Verwende die Patient-ID aus den Programargumenten
+			patientId = args[0];
+		} else {
+			// Frage die Patient-ID über die Konsole ab
+			Scanner scanner = new Scanner(System.in);
+			System.out.print("Bitte geben Sie die Patient-ID ein: ");
+			patientId = scanner.nextLine();
+			scanner.close();
+		}
+
+		// Teste den Aufruf mit der angegebenen Patient-ID
+		try {
+    		String response = patientService.fetchPatientById(patientId);
+
+			System.out.println("FHIR Patient Data:");
+			PatientJsonParser.parsePatientData(response);
+			System.out.println("DEBUG Json File:");
+			System.out.println(response);
+		} catch (Exception e) {
+			System.err.println("An error occurred while fetching or processing the patient data: " + e.getMessage());
+			e.printStackTrace(); }
+  }
 
 	public static void fetchOrganizationByID(String[] args) {
 		OrganizationResourceProvider organizationProvider = new OrganizationResourceProvider();
@@ -42,6 +82,7 @@ public class ExampleRestfulServlet extends RestfulServer {
 			System.out.println(response);
 		} catch (Exception e) {
 			System.err.println("Fehler beim Abrufen der Organisation: " + e.getMessage());
+
 		}
 	}
 
