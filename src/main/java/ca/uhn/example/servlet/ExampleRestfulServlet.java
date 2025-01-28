@@ -15,6 +15,7 @@ import ca.uhn.example.provider.PatientResourceProvider;
 
 import ca.uhn.example.service.AllergyService;
 import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.example.provider.AllergyIntoleranceResourceProvider;
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
 import ca.uhn.fhir.narrative.INarrativeGenerator;
 import ca.uhn.fhir.rest.server.IResourceProvider;
@@ -24,7 +25,7 @@ import ca.uhn.fhir.rest.server.interceptor.ResponseHighlighterInterceptor;
 import ca.uhn.example.service.PatientService;
 
 
-private static final long serialVersionUID = 1L;
+
 
 /**
  * This servlet is the actual FHIR server itself
@@ -32,7 +33,7 @@ private static final long serialVersionUID = 1L;
 
 
 public class ExampleRestfulServlet extends RestfulServer {
-  
+	private static final long serialVersionUID = 1L;
   
   /**
 	 * Constructor
@@ -41,30 +42,9 @@ public class ExampleRestfulServlet extends RestfulServer {
 		super(FhirContext.forR5Cached()); // This is an R5 server
 	}
 
-	public static void fetchAllergyById(String[] args) {
-		AllergyService allergyService = new AllergyService();
 
-		// Allergy-ID dynamisch eingeben
-		String allergyId;
-		if (args.length > 0) {
-			// Verwende die Allergy-ID aus den Programargumenten
-			allergyId = args[0];
-		} else {
-			// Frage die Allergy-ID über die Konsole ab
-			Scanner scanner = new Scanner(System.in);
-			System.out.print("Bitte geben Sie die Allergy-ID ein: ");
-			allergyId = scanner.nextLine();
-			scanner.close();
-		}
 
-		// Teste den Aufruf mit der angegebenen Allergy-ID
-		String response = allergyService.fetchAllergyById(allergyId);
-
-		System.out.println("FHIR Allergy Data:");
-		AllergyJsonParser.parseAllergyData(response);
-  }
-
-	public static void fetchPatientWithID(String[] args) {
+	/*public static void fetchPatientWithID(String[] args) {
 		PatientService patientService = new PatientService();
 
 		// Patient-ID dynamisch eingeben
@@ -91,45 +71,8 @@ public class ExampleRestfulServlet extends RestfulServer {
 		} catch (Exception e) {
 			System.err.println("An error occurred while fetching or processing the patient data: " + e.getMessage());
 			e.printStackTrace(); }
-	}
+	}*/
 
-	public static void fetchOrganizationByID(String[] args) {
-		OrganizationResourceProvider organizationProvider = new OrganizationResourceProvider();
-
-		// Organisation-ID dynamisch eingeben
-		String organizationId;
-		if (args.length > 0) {
-			// Verwende die Organisation-ID aus den Programargumenten
-			organizationId = args[0];
-		} else {
-			// Frage die Organisation-ID über die Konsole ab
-			Scanner scanner = new Scanner(System.in);
-			System.out.print("Bitte geben Sie die Organisation-ID ein: ");
-			organizationId = scanner.nextLine();
-			scanner.close();
-		}
-
-		// Teste den Aufruf mit der angegebenen Organisation-ID
-		try {
-			String response = organizationProvider.getResourceById(new org.hl7.fhir.r5.model.IdType(organizationId)).toString();
-
-			System.out.println("FHIR Organization Data:");
-			System.out.println(response);
-		} catch (Exception e) {
-			System.err.println("Fehler beim Abrufen der Organisation: " + e.getMessage());
-
-		}
-	}
-
-  
-
-	public static void main(String[] args) {
-		fetchPatientWithID(args);
-    	fetchOrganizationByID(args);
-    	fetchAllergyById(args);
-	}
-
-	
 
 	/**
 	 * This method is called automatically when the
@@ -142,6 +85,8 @@ public class ExampleRestfulServlet extends RestfulServer {
 		 */
 		List<IResourceProvider> providers = new ArrayList<>();
 		providers.add(new OrganizationResourceProvider());
+		providers.add(new PatientResourceProvider());
+		providers.add(new AllergyIntoleranceResourceProvider());
 		setResourceProviders(providers);
 
 		/*
@@ -162,6 +107,6 @@ public class ExampleRestfulServlet extends RestfulServer {
 		 * Register the Keycloak Authentication Interceptor
 		 * This will validate incoming requests using Keycloak
 		 */
-		registerInterceptor(new KeycloakAuthInterceptor());
+		// registerInterceptor(new KeycloakAuthInterceptor());
 	}
 }

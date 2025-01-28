@@ -25,6 +25,13 @@ public class KeycloakAuthInterceptor {
     public void handleRequest(RequestDetails theRequestDetails) {
         String authHeader = theRequestDetails.getHeader("Authorization");
 
+
+
+
+
+
+
+
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             throw new AuthenticationException("Authorization header missing or invalid");
         }

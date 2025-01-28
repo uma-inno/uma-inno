@@ -2,6 +2,7 @@ package ca.uhn.example.provider;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.parser.DataFormatException;
+import ca.uhn.fhir.parser.IParser;
 import ca.uhn.fhir.rest.annotation.*;
 import ca.uhn.fhir.rest.api.MethodOutcome;
 import ca.uhn.fhir.rest.server.IResourceProvider;
@@ -14,7 +15,14 @@ import org.hl7.fhir.r5.model.OperationOutcome.IssueSeverity;
 
 import ca.uhn.example.client.RestClient;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.*;
+
+import org.jetbrains.annotations.NotNull;
+import org.json.JSONObject;
 
 /**
  * This is a resource provider which stores Patient resources in memory using a HashMap. This is obviously not a production-ready solution for many reasons,
@@ -22,11 +30,13 @@ import java.util.*;
  */
 public class PatientResourceProvider implements IResourceProvider {
 
-   private static final String BASE_URL = "https://hapi.fhir.org/baseR5/Patient";
+   // private static final String BASE_URL = "https://hapi.fhir.org/baseR5/Patient/";
+   private static final String BASE_URL = "https://server.fire.ly/r5/Patient/";
 
    public String getPatientById(String patientId) {
       try {
-         String endpoint = BASE_URL + "/" + patientId;
+         // String endpoint = BASE_URL + patientId;
+         String endpoint = BASE_URL + patientId + "?_format=json";
          return RestClient.sendRequest(endpoint);
       } catch (Exception e) {
          return handleError(e);
@@ -175,15 +185,34 @@ public class PatientResourceProvider implements IResourceProvider {
     * @param theId The read operation takes one parameter, which must be of type IdDt and must be annotated with the "@Read.IdParam" annotation.
     * @return Returns a resource matching this identifier, or null if none exists.
     */
+
    @Read(version = true)
    public Patient readPatient(@IdParam IdType theId) {
-      Deque<Patient> retVal;
+     //  Deque<Patient> retVal;
+
+      Patient newPat;
+
+      String idString = theId.toString();
+      String[] split = idString.split("/", 2);
+
+      // Integer id = Integer.parseInt(split[1]);
+      String res = fetchAllergyById(split[1]);
+
+      if(res != null) {
+         FhirContext ctx = FhirContext.forR5();
+         IParser parser = ctx.newJsonParser();
+         newPat = parser.parseResource(Patient.class, res);
+         return newPat;
+      } else {
+         throw new ResourceNotFoundException(theId);
+      }
+
+      /*
       try {
+
          retVal = myIdToPatientVersions.get(theId.getIdPartAsLong());
       } catch (NumberFormatException e) {
-         /*
-          * If we can't parse the ID as a long, it's not valid so this is an unknown resource
-          */
+
          throw new ResourceNotFoundException(theId);
       }
 
@@ -198,7 +227,7 @@ public class PatientResourceProvider implements IResourceProvider {
          }
          // No matching version
          throw new ResourceNotFoundException("Unknown version: " + theId.getValue());
-      }
+      }*/
 
    }
 
@@ -210,6 +239,27 @@ public class PatientResourceProvider implements IResourceProvider {
     * @param thePatient This is the actual resource to save
     * @return This method returns a "MethodOutcome"
     */
+
+
+   public String fetchAllergyById(String allergyId) {
+      // Baue die URL dynamisch
+      String url = BASE_URL + allergyId + "?_format=json";
+
+      try {
+         // Führe HTTP GET-Anfrage aus (z. B. mit HttpURLConnection oder einem HTTP-Client)
+         HttpClient client = HttpClient.newHttpClient();
+         HttpRequest request = HttpRequest.newBuilder()
+                 .uri(URI.create(url))
+                 .GET()
+                 .build();
+         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+         return response.body();
+      } catch (Exception e) {
+         e.printStackTrace();
+         return null;
+      }
+   }
+
    @Update()
    public MethodOutcome updatePatient(@IdParam IdType theId, @ResourceParam Patient thePatient) {
       validateResource(thePatient);

@@ -6,11 +6,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
 public class AllergyService {
-    private static final String BASE_URL = "https://hapi.fhir.org/baseR5/AllergyIntolerance";
+    private static final String BASE_URL = "https://hapi.fhir.org/baseR5/AllergyIntolerance/";
 
-    public String fetchAllergyById(String allergyId) {
+    public String fetchAllergyById(int allergyId) {
         // Baue die URL dynamisch
-        String url = BASE_URL + "/" + allergyId;
+        String url = BASE_URL + allergyId;
 
         try {
             // Führe HTTP GET-Anfrage aus (z. B. mit HttpURLConnection oder einem HTTP-Client)
@@ -23,7 +23,7 @@ public class AllergyService {
             return response.body();
         } catch (Exception e) {
             e.printStackTrace();
-            return "Fehler beim Abrufen der Allergiedaten.";
+            return null;
         }
     }
 }

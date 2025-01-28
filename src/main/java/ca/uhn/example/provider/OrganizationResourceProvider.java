@@ -7,17 +7,22 @@ import ca.uhn.fhir.rest.annotation.Read;
 import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
 import org.hl7.fhir.instance.model.api.IBaseOperationOutcome;
+import org.hl7.fhir.r5.model.AllergyIntolerance;
 import org.hl7.fhir.r5.model.IdType;
 import org.hl7.fhir.r5.model.Organization;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Scanner;
 
 public class OrganizationResourceProvider implements IResourceProvider {
 
-   private static final String BASE_URL = "https://hapi.fhir.org/baseR5/Organization";
+   private static final String BASE_URL = "https://server.fire.ly/r5/Organization/";
 
    private final FhirContext fhirContext;
 
@@ -35,23 +40,21 @@ public class OrganizationResourceProvider implements IResourceProvider {
     */
    @Read
    public Organization getResourceById(@IdParam IdType theId) {
-      String resourceId = theId.getValue();
-      String url = BASE_URL + "/" + resourceId;
+      Organization newOrg;
 
-      try {
-         // HTTP GET request to fetch the organization
-         String response = fetchResourceFromRemote(url);
+      String idString = theId.toString();
+      String[] split = idString.split("/", 2);
 
-         // Parse the JSON response into an Organization resource
-         IParser parser = fhirContext.newJsonParser();
-         Organization organization = parser.parseResource(Organization.class, response);
 
-         // Add additional logging or transformations if needed
-         System.out.println("Fetched Organization: " + organization.getName());
-         return organization;
+      String res = fetchOrganizationById(split[1]);
 
-      } catch (IOException e) {
-         throw new ResourceNotFoundException("Could not fetch Organization with ID: " + resourceId, (IBaseOperationOutcome) e);
+      if(res != null) {
+         FhirContext ctx = FhirContext.forR5();
+         IParser parser = ctx.newJsonParser();
+         newOrg = parser.parseResource(Organization.class, res);
+         return newOrg;
+      } else {
+         throw new ResourceNotFoundException(theId);
       }
    }
 
@@ -62,22 +65,22 @@ public class OrganizationResourceProvider implements IResourceProvider {
     * @return The response body as a String
     * @throws IOException If an error occurs during the HTTP request
     */
-   private String fetchResourceFromRemote(String url) throws IOException {
-      HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-      connection.setRequestMethod("GET");
-      connection.setRequestProperty("Accept", "application/fhir+json");
+   public String fetchOrganizationById(String allergyId) {
+      // Baue die URL dynamisch
+      String url = BASE_URL + allergyId + "?_format=json";
 
-      int responseCode = connection.getResponseCode();
-      if (responseCode != 200) {
-         throw new IOException("Failed to fetch resource. HTTP error code: " + responseCode);
-      }
-
-      try (Scanner scanner = new Scanner(connection.getInputStream())) {
-         StringBuilder response = new StringBuilder();
-         while (scanner.hasNext()) {
-            response.append(scanner.nextLine());
-         }
-         return response.toString();
+      try {
+         // Führe HTTP GET-Anfrage aus (z. B. mit HttpURLConnection oder einem HTTP-Client)
+         HttpClient client = HttpClient.newHttpClient();
+         HttpRequest request = HttpRequest.newBuilder()
+                 .uri(URI.create(url))
+                 .GET()
+                 .build();
+         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+         return response.body();
+      } catch (Exception e) {
+         e.printStackTrace();
+         return null;
       }
    }
 }
