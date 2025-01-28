@@ -1,0 +1,51 @@
+FHIR allgemein (Version R5)
+// Grundlegende Spezifikation, gut zum Nachschlagen von Begriffen
+http://hl7.org/fhir/
+
+-----------------------------------------------------------------
+
+HAPI-FHIR
+
+Documentation
+// Allgemeine Dokumentation
+https://hapifhir.io/hapi-fhir/docs/
+
+FHIR R5 Testserver endpoint
+// Testdatenbank zur Abfrage diverser Ressourcen
+https://hapi.fhir.org/baseR5
+
+-----------------------------------------------------------------
+
+OAuth2
+
+Mit 2014 introduction to open id connect and o-auth 2
+// Einführung OAuth2
+https://www.slideshare.net/slideshow/mit-2014-introduction-to-open-id-connect-and-oauth-2/39539771
+
+User-Managed Access (UMA) 2.0 Grant for OAuth 2.0 Authorization
+// Spezifikation Tokenfluss für UMA
+https://docs.kantarainitiative.org/uma/wg/oauth-uma-grant-2.0-09.html
+
+Health Relationship Trust Profile for Fast Healthcare Interoperability Resources (FHIR) OAuth 2.0 Scopes
+// Spezifikation der möglichen Berechtigungen für OAuth-Token
+https://openid.net/specs/openid-heart-fhir-oauth2-1_0.html
+
+-----------------------------------------------------------------
+
+UMA
+
+Patient-Centric Data Sharing with UMA
+// Praxisbeispiel UMA
+https://kantara.atlassian.net/wiki/x/BQBLCg
+
+Federated Authorization for User-Managed Access (UMA) 2.0
+// Spezifikation der Endpoints im Authorisationsprozess
+https://docs.kantarainitiative.org/uma/wg/rec-oauth-uma-federated-authz-2.0.html
+
+-----------------------------------------------------------------
+
+International Patient Summary (IPS)
+
+Medizinische Informatik - Internationale Patienten-Kurzakte (ISO/DIS 27269:2024) (Normen-Lesesaal)
+// Spezifikation der Bestandteile der IPS
+https://useradmin.austrian-standards.at/saml/login?idp=https://david.technikum-wien.at/idp/shibboleth
