@@ -1,0 +1,682 @@
+@startuml
+
+!theme plain
+top to bottom direction
+skinparam linetype ortho
+
+class BattleCard {
+  + BattleCard(JSONObject): 
+  + BattleCard(BattleCard): 
+  + BattleCard(String, String, float): 
+  + BattleCard(String, String, String, float, String, String): 
+  - elementId: Integer
+  - specialId: Integer
+  - properties: HashMap<String, String>
+  - typeId: Integer
+  + getTypeId(): Integer
+  + getSpecialId(): Integer
+  + getElementId(): Integer
+  + getProperties(): HashMap<String, String>
+  + setTypeId(Integer): void
+  + setSpecialId(Integer): void
+  + setElementId(Integer): void
+  + cardExtendedInfo(): JSONObject
+  + putProperty(String, String): void
+}
+class BattleCardFactory {
+  + BattleCardFactory(): 
+  + specialMap: Map<String, Integer>
+  + cardTypeMap: Map<String, Integer>
+  + elementMap: Map<String, Integer>
+  - inferCardTypeFromName(BattleCard, String): void
+  - inferElementFromName(BattleCard, String): void
+  - inferSpecialFromName(BattleCard, String): void
+  + buildBattleCard(JSONObject): BattleCard
+}
+class BattleCardFactoryTest {
+  + BattleCardFactoryTest(): 
+  ~ testMonster1: JSONObject
+  ~ testMonster2: JSONObject
+  ~ factory: BattleCardFactory
+  ~ testMonster3: JSONObject
+  ~ testSpell1: JSONObject
+  + testCardTypeInference(): void
+  + testElementInference(): void
+  + specialMonsterDefaultType(): void
+  + defaultInference(): void
+}
+class BattleController {
+  + BattleController(): 
+  + updateElo(User, User, String): Response
+  + updateTie(User, User, String): Response
+}
+class BattleLogic {
+  + BattleLogic(User, User): 
+  ~ battleLog: StringBuilder
+  + effectScript: Map<Integer, String>
+  ~ player1: User
+  ~ deckP1: ArrayList<BattleCard>
+  ~ deckP2: ArrayList<BattleCard>
+  + effectScale: int
+  + specialEffect: boolean
+  ~ player2: User
+  + processSpecial(BattleCard, BattleCard): ArrayList<BattleCard>
+  + processPostBattle(User, User): Response
+  + processTypes(BattleCard, BattleCard): HashMap<String, BattleCard>
+  + call(): Response
+  + processTie(User, User): Response
+}
+class BattlesService {
+  + BattlesService(): 
+  - battlesFuture: Future<Response>
+  - validatedUsers: List<User>
+  - queueSemaphore: Semaphore
+  - battlesCall: Callable<Response>
+  - threadPool: ExecutorService
+  - lock: Object
+  - barrier: CyclicBarrier
+  + handleRequest(Request): Response
+}
+class Card {
+  + Card(JSONObject): 
+  + Card(String, String, float): 
+  - name: String
+  - damage: float
+  - id: String
+  + getId(): String
+  + getName(): String
+  + getDamage(): float
+  + setId(String): void
+  + setName(String): void
+  + setDamage(float): void
+  + toJSON(): JSONObject
+}
+class CardDataRepository {
+  + CardDataRepository(TransactionUnit): 
+  - tradeData: ResultSet
+  - cardData: ResultSet
+  - transactionUnit: TransactionUnit
+  + getTradeData(): Response
+  + getCardHashSet(): HashSet<String>
+  - getAllCardData(): void
+  + getCardData(String): Card?
+  + getBattleProperties(String): HashMap<String, Integer>?
+  + getUserCards(String): JSONArray
+}
+class CardsService {
+  + CardsService(): 
+  + handleRequest(Request): Response
+}
+enum ContentType << enumeration >> {
+  - ContentType(String): 
+  + JSON: 
+  + mimeType: String
+  + TEXT: 
+  + HTML: 
+  + values(): ContentType[]
+  + valueOf(String): ContentType
+}
+class Controller {
+  + Controller(): 
+  - objectMapper: ObjectMapper
+  + getObjectMapper(): ObjectMapper
+}
+class DbAccessException {
+  + DbAccessException(String): 
+  + DbAccessException(String, Throwable): 
+  + DbAccessException(Throwable): 
+}
+enum DbCredentials << enumeration >> {
+  + DbCredentials(): 
+  - connectionUrl: String
+  + INSTANCE: 
+  + getConnection(): Connection
+  + values(): DbCredentials[]
+  + valueOf(String): DbCredentials
+}
+class Deck {
+  + Deck(JSONObject, StackType): 
+}
+class DeckController {
+  + DeckController(): 
+  + changeDeck(User): Response
+}
+class DeckRepository {
+  + DeckRepository(TransactionUnit): 
+  + DECK_SIZE: int
+  - transactionUnit: TransactionUnit
+  + updateDeck(User): Response
+  + getDeck(int, HashMap<String, String>): Response
+  + buildParamQuery(String, HashMap<String, String>): String
+}
+class DeckService {
+  + DeckService(): 
+  - DECK_SIZE: int
+  - controller: DeckController
+  + handleRequest(Request): Response
+}
+class DeckServiceTest {
+  + DeckServiceTest(): 
+  + deckService: DeckService
+  + setup(): void
+}
+enum FieldValueType << enumeration >> {
+  + FieldValueType(): 
+  + FLOAT: 
+  + INTEGER: 
+  + STRING: 
+  + BOOLEAN: 
+  + NUMBER: 
+  + values(): FieldValueType[]
+  + valueOf(String): FieldValueType
+}
+class HashGenerator {
+  + HashGenerator(): 
+  + SALT_LENGTH: int
+  + HASH_ALGORITHM: String
+  + generateHash(String): String?
+  + generateHashPair(String): HashMap<String, String>
+  + generateSalt(): String
+}
+class HashGeneratorTest {
+  + HashGeneratorTest(): 
+  ~ testHash: String
+  ~ password: String
+  ~ testSalt: String
+  + testHashGenerator(): void
+  + testHashPairGenerator(): void
+}
+class HeaderMap {
+  + HeaderMap(): 
+  + LENGTH_HEADER: String
+  + AUTH_HEADER: String
+  - headers: Map<String, String>
+  + HEADER_SEPARATOR: String
+  + CONTENT_TYPE_HEADER: String
+  + splitLine(String): void
+  + getAuthHeader(): String
+  + getContentType(): ContentType
+  + getHeader(String): String
+  + getContentLength(): int
+  + print(): void
+}
+enum HttpStatus << enumeration >> {
+  - HttpStatus(int, String): 
+  + FORBIDDEN: 
+  + NOT_FOUND: 
+  + OK: 
+  + statusMessage: String
+  + BAD_REQUEST: 
+  + NOT_IMPLEMENTED: 
+  + ACCEPTED: 
+  + NO_CONTENT: 
+  + UNAUTHORIZED: 
+  + CONFLICT: 
+  + INTERNAL_SERVER_ERROR: 
+  + CREATED: 
+  + statusCode: int
+  + values(): HttpStatus[]
+  + valueOf(String): HttpStatus
+}
+interface IQueryBuilder << interface >> {
+  + buildParamQuery(String, HashMap<String, String>): String
+}
+interface IService << interface >> {
+  + handleRequest(Request): Response
+}
+interface IStack << interface >> {
+  + integrityCheck(): boolean
+  + add(JSONObject): int
+  + remove(String): int
+  + list(): JSONObject
+}
+class LoginController {
+  + LoginController(): 
+  + login(User): Response
+}
+class LoginService {
+  + LoginService(): 
+  - controller: LoginController
+  + handleRequest(Request): Response
+}
+class LoginServiceTest {
+  + LoginServiceTest(): 
+  ~ testUsername: String
+  ~ testSalt: String
+  + checkerStub: MockedStatic<RequestSchemaChecker>
+  ~ testPassword: String
+  ~ testPasswordHash: String
+  + sessionRepositoryStub: MockedStatic<SessionRepository>
+  ~ testUser: User
+  ~ mockController: LoginController
+  + hashGeneratorStub: MockedStatic<HashGenerator>
+  ~ loginService: LoginService
+  ~ setup(): void
+  + failPasswordCheck(): void
+  ~ tearDown(): void
+  + testPasswordCheck(): void
+  + setUp(): void
+}
+class Main {
+  + Main(): 
+  + main(String[]): void
+  - setupRouter(): Router
+}
+class PackageController {
+  + PackageController(): 
+  + addPackage(JSONArray): Response
+}
+class PackageRepository {
+  + PackageRepository(TransactionUnit): 
+  - transactionUnit: TransactionUnit
+  + PACK_SIZE: int
+  + registerPackage(JSONArray): Response
+  + buyPack(User): Response
+}
+class PackageServiceTest {
+  + PackageServiceTest(): 
+  ~ typoPackage: String
+  + sessionRepositoryStub: MockedStatic<SessionRepository>
+  ~ service: PackagesService
+  ~ mockController: PackageController
+  ~ mockUser: User
+  ~ testPack2: String
+  ~ mockRequest: Request
+  ~ testPack1: String
+  + testPrivilege(): void
+  + setup(): void
+  + tearDown(): void
+  + setUp(): void
+}
+class PackagesService {
+  + PackagesService(): 
+  - ID_PATTERN_STRING: String
+  - PACKAGE_SIZE: int
+  - controller: PackageController
+  + handleRequest(Request): Response
+}
+class RegistrationController {
+  + RegistrationController(): 
+  + getUser(String): Response
+  + register(String, String): Response
+  + updateUser(String, String, String, String): Response
+}
+class RegistrationService {
+  + RegistrationService(): 
+  - controller: RegistrationController
+  + handleRequest(Request): Response
+}
+class RegistrationServiceTest {
+  + RegistrationServiceTest(): 
+  ~ mockUser: User
+  ~ mockHeaderMap: HeaderMap
+  ~ updateTestBody: String
+  ~ service: RegistrationService
+  + sessionRepository: MockedStatic<SessionRepository>
+  ~ mockController: RegistrationController
+  ~ mockRequest: Request
+  + requestSchemaChecker: MockedStatic<RequestSchemaChecker>
+  ~ registrationTestBody: String
+  + tearDown(): void
+  ~ setUp(): void
+  + testUserUpdate(): void
+  + testUserRegistration(): void
+  + failUserUpdate(): void
+  + failUserRegistration(): void
+  + setup(): void
+}
+class Request {
+  + Request(): 
+  - params: HashMap<String, String>
+  - headerMap: HeaderMap
+  + PARAM_LIMIT: int
+  - path: String
+  - pathParts: List<String>
+  - url: String
+  - body: String
+  - method: RestMethod
+  + setBody(String): void
+  + getPathParts(): List<String>
+  + getHeaderMap(): HeaderMap
+  + getRoute(): String
+  + getPath(): String
+  + getMethod(): RestMethod
+  + setPath(String): void
+  + getUrl(): String
+  + getHeader(String): String
+  + setParams(String): void
+  + setUrl(String): void
+  + getBody(): String
+  + getParams(): HashMap<String, String>
+  + setMethod(RestMethod): void
+}
+class RequestBuilder {
+  + RequestBuilder(): 
+  - getMethod(String): RestMethod
+  + buildRequest(BufferedReader): Request
+  - setPath(Request, String): void
+}
+class RequestBuilderTest {
+  + RequestBuilderTest(): 
+  ~ testRequest1: String
+  ~ testRequestInvalidMethod1: String
+  ~ testRequestInvalidMethod2: String
+  - requestBuilder: RequestBuilder
+  - testReader: BufferedReader
+  + testBuild(): void
+  + invalidMethod(): void
+  + setup(): void
+}
+class RequestHandler {
+  + RequestHandler(Socket, Router): 
+  - router: Router
+  - out: PrintWriter
+  - in: BufferedReader
+  - socket: Socket
+  + run(): void
+}
+class RequestSchemaChecker {
+  + RequestSchemaChecker(): 
+  + JsonKeyValueCheck(String, SchemaWhitelists): boolean
+}
+class RequestSchemaCheckerTest {
+  + RequestSchemaCheckerTest(): 
+  ~ userCredentialsTest4: String
+  ~ cardTest3: String
+  ~ userCredentialsTest2: String
+  ~ userDataTest: String
+  ~ userDataTest2: String
+  ~ userDataTest3: String
+  ~ userCredentialsTest5: String
+  ~ cardTest2: String
+  ~ tradingDealTest2: String
+  ~ userDataTest5: String
+  ~ cardTest: String
+  ~ tradingDealTest5: String
+  ~ tradingDealTest3: String
+  ~ userDataTest4: String
+  ~ cardTest5: String
+  ~ userCredentialsTest: String
+  ~ userCredentialsTest3: String
+  ~ cardTest4: String
+  ~ tradingDealTest: String
+  ~ tradingDealTest4: String
+  + invalidTradingDeal(): void
+  + invalidObjects(): void
+  + validObjects(): void
+  + invalidUserCredentials(): void
+  + invalidUserData(): void
+  + invalidCard(): void
+}
+class RequestTest {
+  + RequestTest(): 
+  + testRequest: Request
+  + testPathSetter(): void
+  + setUp(): void
+  + testUrlSetter(): void
+}
+class Response {
+  + Response(HttpStatus, ContentType, String): 
+  - contentType: String
+  - body: String
+  - statusCode: int
+  - statusMessage: String
+  + getStatusCode(): int
+  + getMessage(): String
+}
+enum RestMethod << enumeration >> {
+  + RestMethod(): 
+  + POST: 
+  + GET: 
+  + PUT: 
+  + PATCH: 
+  + DELETE: 
+  + valueOf(String): RestMethod
+  + values(): RestMethod[]
+}
+class Router {
+  + Router(): 
+  - services: Map<String, IService>
+  + getService(String): IService
+  + newService(String, IService): void
+  + deleteService(String): void
+}
+enum SchemaWhitelists << enumeration >> {
+  - SchemaWhitelists(Map<String, FieldValueType>): 
+  + TRADEDEAL: 
+  + whitelist: Map<String, FieldValueType>
+  + USER_CREDENTIALS: 
+  + USER_DATA: 
+  + CARD: 
+  + values(): SchemaWhitelists[]
+  + valueOf(String): SchemaWhitelists
+}
+class ScoreboardService {
+  + ScoreboardService(): 
+  + handleRequest(Request): Response
+}
+class Server {
+  + Server(int, Router): 
+  - router: Router
+  - port: int
+  + start(): void
+}
+class SessionRepository {
+  + SessionRepository(TransactionUnit): 
+  - transactionUnit: TransactionUnit
+  + fetchUserFromToken(String): User
+  + loginUser(User): Response
+  + registerUser(String, String): Response
+  + fetchScoreboard(): JSONArray?
+  + updateElo(User, User, String): Response
+  + fetchUserFromId(int): User?
+  + updateTie(User, User, String): Response
+  + fetchUserFromName(String): User?
+  + updateUser(String, String, String, String): Response
+}
+class Stack {
+  + Stack(JSONObject, StackType): 
+  - checkPassed: boolean
+  - key: String
+  - cardParams: String[]
+  ~ cards: JSONArray
+  + integrityCheck(JSONObject): boolean
+  + integrityCheck(): boolean
+  + list(): JSONObject
+  + add(JSONObject): int
+  + remove(String): int
+}
+enum StackType << enumeration >> {
+  + StackType(): 
+  + STACK: 
+  + TRADE: 
+  + BATTLEDECK: 
+  + CARD: 
+  + DECK: 
+  + values(): StackType[]
+  + valueOf(String): StackType
+}
+class StatsService {
+  + StatsService(): 
+  + handleRequest(Request): Response
+}
+class TradeRepository {
+  + TradeRepository(TransactionUnit): 
+  - transactionUnit: TransactionUnit
+  + createNewTrade(User, TradingDeal): Response
+  + deleteTrade(User, String): Response
+  + getTradingDeal(String): TradingDeal?
+  + getTradeListings(): Response
+  + executeTrade(User, JSONObject, String): Response
+}
+class TradingController {
+  + TradingController(): 
+  + getTrades(): Response
+  + newTradeOffer(User, TradingDeal): Response
+  + makeTrade(User, JSONObject, String): Response
+  + revokeTradeOffer(User, String): Response
+}
+class TradingDeal {
+  + TradingDeal(String, String, String, float): 
+  + TradingDeal(String, String, String, float, int): 
+  - mindamage: float
+  - cardid: String
+  - type: String
+  - ownerId: Integer
+  - tradeid: String
+  - targetCard: JSONObject
+  + getTradeid(): String
+  + getCardid(): String
+  + getType(): String
+  + getMindamage(): float
+  + getOwnerId(): Integer
+  + getTargetCard(): JSONObject
+  + setOwnerId(Integer): void
+  + setTargetCard(JSONObject): void
+  + toJSON(): JSONObject
+}
+class TradingService {
+  + TradingService(): 
+  - controller: TradingController
+  - ID_PATTERN_STRING: String
+  + handleRequest(Request): Response
+}
+class TradingServiceTest {
+  + TradingServiceTest(): 
+  ~ testDeal: JSONObject
+  ~ testPackString: String
+  + checkerStub: MockedStatic<RequestSchemaChecker>
+  ~ mockController: TradingController
+  + cardFactoryStub: MockedStatic<BattleCardFactory>
+  ~ mockTradingDeal: TradingDeal
+  ~ testPack: JSONArray
+  + tradeRepositoryStub: MockedStatic<TradeRepository>
+  ~ testDeal1: JSONObject
+  ~ mockBattleCard: BattleCard
+  ~ tradingService: TradingService
+  + sessionRepositoryStub: MockedStatic<SessionRepository>
+  ~ userToken: String
+  ~ mockUser: User
+  ~ requestMock: Request
+  + setup(): void
+  + testTradingDealOwnerCheck(): void
+  + testTradePost(): void
+  + setUp(): void
+  + testAuth(): void
+  + tearDown(): void
+  + testCardOwnershipCheck(): void
+}
+class TransactionServiceTest {
+  + TransactionServiceTest(): 
+  ~ userMock: User
+  ~ mockRequest: Request
+  ~ headerMapMock: HeaderMap
+  + sessionRepositoryMock: MockedStatic<SessionRepository>
+  ~ service: TransactionsService
+  ~ controller: TransactionsController
+  + testRouting(): void
+  + setUp(): void
+  + tearDown(): void
+  + setup(): void
+  + testCoinCount(): void
+}
+class TransactionUnit {
+  + TransactionUnit(): 
+  - connection: Connection
+  + prepareStatement(String): PreparedStatement
+  + dbRollback(): void
+  + dbFinish(): void
+  + close(): void
+  + dbCommit(): void
+}
+class TransactionsController {
+  + TransactionsController(): 
+  + purchasePack(User): Response
+}
+class TransactionsService {
+  + TransactionsService(): 
+  - controller: TransactionsController
+  + handleRequest(Request): Response
+}
+class User {
+  + User(String, int, int): 
+  + User(String, String, String): 
+  + User(Integer, String, String, String, Integer, Integer, Integer, String, String, String, String, String, String, int, String): 
+  + User(): 
+  + User(User): 
+  + User(Integer, String, String, String, Integer, Integer, Integer, String, String, String, String, String, String, int, String, String): 
+  - bio: String
+  - image: String
+  - name: String
+  - password: String
+  - coins: int
+  - tokenSalt: String
+  - wins: int
+  - id: int
+  - playCount: int
+  - elo: int
+  - deck: String
+  - lastLogin: String
+  - username: String
+  - salt: String
+  - stack: String
+  - token: String
+  + getBio(): String
+  + getToken(): String
+  + getName(): String
+  + setLastLogin(String): void
+  + setElo(int): void
+  + setUsername(String): void
+  + setPassword(String): void
+  + setImage(String): void
+  + getImage(): String
+  + setWins(int): void
+  + setCoins(int): void
+  + setBio(String): void
+  + setTokenSalt(String): void
+  + getWins(): int
+  + getLastLogin(): String
+  + setSalt(String): void
+  + setDeck(String): void
+  + setStack(String): void
+  + setName(String): void
+  + setPlayCount(int): void
+  + setToken(String): void
+  + setId(int): void
+  + getTokenSalt(): String
+  + getUsername(): String
+  + getSalt(): String
+  + getAllCards(): JSONArray
+  + getStack(): JSONArray
+  + getUserData(): JSONObject
+  + getUserStats(): JSONObject
+  + getPlayCount(): int
+  + getPassword(): String
+  + getId(): int
+  + getDeck(): JSONArray
+  + getElo(): int
+  + getCoins(): int
+}
+
+BattleCard                -[#000082,plain]-^  Card                     
+BattleController          -[#000082,plain]-^  Controller               
+BattlesService            -[#008200,dashed]-^  IService                 
+CardsService              -[#008200,dashed]-^  IService                 
+Deck                      -[#000082,plain]-^  Stack                    
+DeckController            -[#000082,plain]-^  Controller               
+DeckRepository            -[#008200,dashed]-^  IQueryBuilder            
+DeckService               -[#008200,dashed]-^  IService                 
+LoginController           -[#000082,plain]-^  Controller               
+LoginService              -[#008200,dashed]-^  IService                 
+PackageController         -[#000082,plain]-^  Controller               
+PackagesService           -[#008200,dashed]-^  IService                 
+RegistrationController    -[#000082,plain]-^  Controller               
+RegistrationService       -[#008200,dashed]-^  IService                 
+ScoreboardService         -[#008200,dashed]-^  IService                 
+Stack                     -[#008200,dashed]-^  IStack                   
+StatsService              -[#008200,dashed]-^  IService                 
+TradingController         -[#000082,plain]-^  Controller               
+TradingService            -[#008200,dashed]-^  IService                 
+TransactionsController    -[#000082,plain]-^  Controller               
+TransactionsService       -[#008200,dashed]-^  IService                 
+@enduml
