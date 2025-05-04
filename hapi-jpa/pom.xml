@@ -9,6 +9,7 @@
         <clinical-reasoning.version>3.19.0</clinical-reasoning.version>
     </properties>
 
+
     <!-- one-liner to take you to the cloud with settings form the application.yaml file: -->
     <!-- 'mvn clean package com.google.cloud.tools:jib-maven-plugin:dockerBuild -Dimage=distroless-hapi && docker run -p 8080:8080 distroless-hapi' -->
     <!--
@@ -389,6 +390,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+        </dependency>
+
+
+        <!--
+        dependency for the JPA interceptors
+        -->
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-server</artifactId>
+            <version>6.0.1</version>
         </dependency>
 
     </dependencies>
