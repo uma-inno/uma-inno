@@ -2,7 +2,7 @@
 server:
   #  servlet:
   #    context-path: /example/path
-  port: 8080
+  port: 8081
 #Adds the option to go to eg. http://localhost:8080/actuator/health for seeing the running configuration
 #see https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints
 management:
@@ -40,12 +40,12 @@ spring:
     baselineOnMigrate: true
     fail-on-missing-locations: false
   datasource:
-    #url: 'jdbc:h2:file:./target/database/h2'
-    url: 'jdbc:postgresql://localhost:5432/hapi'
+    url: 'jdbc:h2:file:./target/database/h2'
+    #url: 'jdbc:postgresql://localhost:5432/hapi'
     # DO NOT USE IN PRODUCTION
     username: admin
     password: admin
-    driverClassName: org.postgresql.Driver
+    driverClassName: org.h2.Driver
     # database connection pool size
     hikari:
       maximum-pool-size: 10
@@ -57,7 +57,7 @@ spring:
       #Hibernate dialect is automatically detected except Postgres and H2.
       #If using H2, then supply the value of ca.uhn.fhir.jpa.model.dialect.HapiFhirH2Dialect
       #If using postgres, then supply the value of ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
-      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
+      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirH2Dialect
   #      hibernate.hbm2ddl.auto: update
   #      hibernate.jdbc.batch_size: 20
   #      hibernate.cache.use_query_cache: false
@@ -260,12 +260,11 @@ hapi:
     search_prefetch_thresholds: 13,503,2003,-1
 
     # comma-separated package names, will be @ComponentScan'ed by Spring to allow for creating custom Spring beans
-    #custom-bean-packages:
-    
-    # comma-separated list of fully qualified interceptor classes. 
+    custom-bean-packages: ca.uhn.fhir.jpa.starter.interceptors
+      # comma-separated list of fully qualified interceptor classes. 
     # classes listed here will be fetched from the Spring context when combined with 'custom-bean-packages', 
     # or will be instantiated via reflection using an no-arg contructor; then registered with the server  
-    #custom-interceptor-classes:  
+    custom-interceptor-classes: ca.uhn.fhir.jpa.starter.interceptors.JpaEntityTrackingInterceptor,ca.uhn.fhir.jpa.starter.interceptors.UmaKeycloakAuthInterceptor
 
     # comma-separated list of fully qualified provider classes. 
     # classes listed here will be fetched from the Spring context when combined with 'custom-bean-packages', 
@@ -339,3 +338,37 @@ hapi:
 #  protocol: 'http'
 #  schema_management_strategy: CREATE
 #  username: SomeUsername
+
+# UMA (User-Managed Access) Configuration
+uma:
+  enabled: true
+  authorization-server-uri: "http://172.29.16.64:8080/realms/FHIR-Auth"
+  client-id: "fhir-client"
+  client-secret: "QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP"
+  realm: "FHIR-Auth"
+  
+  # Endpoints (relative to authorization-server-uri)
+  endpoints:
+    introspection: "/protocol/openid-connect/token/introspect"
+    token: "/protocol/openid-connect/token"
+    permission: "/authz/protection/permission"
+  
+  # Public endpoints that don't require authentication
+  public-endpoints:
+    - "/actuator/health"
+    - "/metadata"
+    - "/.well-known"
+    - "/fhir/metadata"  # FHIR capability statement
+  
+  # Resource to scope mappings
+  resource-mappings:
+    read-scope: "read"
+    create-scope: "create"
+    update-scope: "update"
+    delete-scope: "delete"
+
+# Logging configuration for UMA
+logging:
+  level:
+    ca.uhn.example.interceptor.UmaKeycloakAuthInterceptor: DEBUG
+    org.apache.http: INFO
