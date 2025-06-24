@@ -5,8 +5,8 @@ import ca.uhn.fhir.rest.annotation.OperationParam;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import ca.uhn.fhir.rest.server.exceptions.InvalidRequestException;
 import ca.uhn.fhir.rest.server.exceptions.AuthenticationException;
-import org.hl7.fhir.r4.model.Parameters;
-import org.hl7.fhir.r4.model.StringType;
+import org.hl7.fhir.r5.model.Parameters;
+import org.hl7.fhir.r5.model.StringType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
