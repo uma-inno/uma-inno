@@ -48,6 +48,7 @@ import ca.uhn.fhir.jpa.starter.annotations.OnCorsPresent;
 import ca.uhn.fhir.jpa.starter.annotations.OnImplementationGuidesPresent;
 import ca.uhn.fhir.jpa.starter.common.validation.IRepositoryValidationInterceptorFactory;
 import ca.uhn.fhir.jpa.starter.ig.IImplementationGuideOperationProvider;
+import ca.uhn.fhir.jpa.starter.uma.UmaProvider;
 import ca.uhn.fhir.jpa.starter.util.EnvironmentHelper;
 import ca.uhn.fhir.jpa.subscription.util.SubscriptionDebugLogInterceptor;
 import ca.uhn.fhir.jpa.util.ResourceCountCache;
@@ -313,6 +314,7 @@ public class StarterJpaConfig {
 
 		fhirServer.registerProviders(resourceProviderFactory.createProviders());
 		fhirServer.registerProvider(jpaSystemProvider);
+		fhirServer.registerProvider(new UmaProvider());
 		fhirServer.setServerConformanceProvider(calculateConformanceProvider(
 				fhirSystemDao, fhirServer, jpaStorageSettings, searchParamRegistry, theValidationSupport));
 
