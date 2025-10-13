@@ -639,10 +639,27 @@
         "displayName" : "PatientResource",
         "attributes" : { },
         "uris" : [ "http://localhost:8080/fhir/Patient/*" ],
-        "icon_uri" : ""
+        "icon_uri" : "",
+        "scopes" : [ {
+          "name" : "read"
+        }, {
+          "name" : "create"
+        }, {
+          "name" : "update"
+        }, {
+          "name" : "delete"
+        } ]
       } ],
       "policies" : [ ],
-      "scopes" : [ ],
+      "scopes" : [ {
+        "name" : "read"
+      }, {
+        "name" : "create"
+      }, {
+        "name" : "update"
+      }, {
+        "name" : "delete"
+      } ],
       "decisionStrategy" : "UNANIMOUS"
     }
   }, {
