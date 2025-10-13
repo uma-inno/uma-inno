@@ -24,10 +24,10 @@ import java.io.IOException;
 public class UmaKeycloakAuthInterceptor {
     private static final Logger logger = LoggerFactory.getLogger(UmaKeycloakAuthInterceptor.class);
     
-    // Use server IP for internal server-to-server communication
-    private static final String AUTHORIZATION_SERVER_URI_INTERNAL = "http://172.29.16.64:8080/realms/FHIR-Auth";
-    // Use external IP for client-facing responses
-    private static final String AUTHORIZATION_SERVER_URI_EXTERNAL = "http://172.29.16.64:8080/realms/FHIR-Auth";
+    // Use Keycloak service name for Docker internal communication (or localhost for local dev)
+    private static final String AUTHORIZATION_SERVER_URI_INTERNAL = "http://keycloak:8080/realms/FHIR-Auth";
+    // Use localhost for client-facing responses (clients access from outside Docker)
+    private static final String AUTHORIZATION_SERVER_URI_EXTERNAL = "http://localhost:8080/realms/FHIR-Auth";
     
     private static final String INTROSPECTION_URL = AUTHORIZATION_SERVER_URI_INTERNAL + "/protocol/openid-connect/token/introspect";
     private static final String PERMISSION_ENDPOINT = AUTHORIZATION_SERVER_URI_INTERNAL + "/authz/protection/permission";
