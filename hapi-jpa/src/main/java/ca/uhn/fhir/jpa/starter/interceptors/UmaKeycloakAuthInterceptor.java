@@ -19,19 +19,22 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Base64;
+import java.util.List;
+import java.util.ArrayList;
 
 @Component
 public class UmaKeycloakAuthInterceptor {
     private static final Logger logger = LoggerFactory.getLogger(UmaKeycloakAuthInterceptor.class);
     
-    // Use Keycloak service name for Docker internal communication (or localhost for local dev)
-    private static final String AUTHORIZATION_SERVER_URI_INTERNAL = "http://keycloak:8080/realms/FHIR-Auth";
-    // Use localhost for client-facing responses (clients access from outside Docker)
-    private static final String AUTHORIZATION_SERVER_URI_EXTERNAL = "http://localhost:8080/realms/FHIR-Auth";
-    
-    private static final String INTROSPECTION_URL = AUTHORIZATION_SERVER_URI_INTERNAL + "/protocol/openid-connect/token/introspect";
-    private static final String PERMISSION_ENDPOINT = AUTHORIZATION_SERVER_URI_INTERNAL + "/authz/protection/permission";
-    private static final String TOKEN_URL = AUTHORIZATION_SERVER_URI_INTERNAL + "/protocol/openid-connect/token";
+    // Use localhost for both internal and external communication
+    // Docker extra_hosts configuration maps localhost to the host machine (host-gateway)
+    // This ensures the FHIR server uses the same URL that Keycloak uses for token issuance
+    private static final String AUTHORIZATION_SERVER_URI = "http://localhost:8080/realms/FHIR-Auth";
+
+    private static final String INTROSPECTION_URL = AUTHORIZATION_SERVER_URI + "/protocol/openid-connect/token/introspect";
+    private static final String PERMISSION_ENDPOINT = AUTHORIZATION_SERVER_URI + "/authz/protection/permission";
+    private static final String TOKEN_URL = AUTHORIZATION_SERVER_URI + "/protocol/openid-connect/token";
     
     private static final String CLIENT_ID = "fhir-client";
     private static final String CLIENT_SECRET = "QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP";
@@ -67,13 +70,47 @@ public class UmaKeycloakAuthInterceptor {
             }
 
             String token = authHeader.substring(7);
+
+            // FIRST: Check if token is active
             if (!isTokenValid(token)) {
                 logger.warn("Invalid or expired token for request: {}", requestPath);
                 // Handle invalid token the same way as tokenless access - request new permission ticket
                 handleTokenlessAccess(theRequestDetails);
                 return; // handleTokenlessAccess will throw an exception to abort processing
             }
-            logger.debug("Successfully authenticated request to: {}", requestPath);
+
+            // SECOND: Check if token has required permissions for this resource
+            String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
+            String[] requiredScopes = mapHttpMethodToScopes(httpMethod);
+            String resourceName = mapFhirResourceToKeycloakResource(resourceType);
+
+            logger.info("=== PERMISSION CHECK START ===");
+            logger.info("HTTP Method: {}, Required Scopes: {}, Resource Name: {}",
+                       httpMethod, String.join(",", requiredScopes), resourceName);
+
+            // Validate that the token has at least one of the required scopes
+            boolean hasPermission = false;
+            for (String scope : requiredScopes) {
+                logger.info("Checking if token has permission for scope: {}", scope);
+                if (hasRequiredPermission(token, resourceName, scope)) {
+                    hasPermission = true;
+                    logger.info("✓ Token has permission for scope: {}", scope);
+                    break;
+                }
+            }
+
+            logger.info("=== PERMISSION CHECK END - Result: {} ===", hasPermission ? "GRANTED" : "DENIED");
+
+            if (!hasPermission) {
+                logger.warn("Token does not have required permissions for resource: {}, scopes: {}",
+                           resourceName, String.join(",", requiredScopes));
+                // Request new permission ticket with updated permissions
+                handleTokenlessAccess(theRequestDetails);
+                return;
+            }
+
+            logger.info("Successfully authenticated and authorized request to: {} with resource: {}",
+                       requestPath, resourceName);
             // Continue processing by returning normally
         } catch (AuthenticationException | ForbiddenOperationException e) {
             // Re-throw expected UMA exceptions
@@ -301,16 +338,16 @@ public class UmaKeycloakAuthInterceptor {
             if (response != null) {
                 String wwwAuthenticateHeader = String.format(
                     "UMA realm=\"%s\", as_uri=\"%s\", ticket=\"%s\"",
-                    "FHIR-Auth", 
-                    AUTHORIZATION_SERVER_URI_EXTERNAL,  // Use external URI for client response
+                    "FHIR-Auth",
+                    AUTHORIZATION_SERVER_URI,
                     permissionTicket
                 );
                 response.setHeader("WWW-Authenticate", wwwAuthenticateHeader);
             }
         }
-        
-        logger.info("Responding with permission ticket - Ticket: {}, AS URI: {}", 
-                   permissionTicket, AUTHORIZATION_SERVER_URI_EXTERNAL);
+
+        logger.info("Responding with permission ticket - Ticket: {}, AS URI: {}",
+                   permissionTicket, AUTHORIZATION_SERVER_URI);
                    
         // Throw AuthenticationException with 401 status - HAPI FHIR will handle the response
         throw new AuthenticationException("Access token required. Use permission ticket to obtain access token.");
@@ -361,22 +398,35 @@ public class UmaKeycloakAuthInterceptor {
     }
 
     private boolean isTokenValid(String token) {
+        logger.info("Starting token introspection for token: {}...", token.substring(0, Math.min(50, token.length())));
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpPost post = new HttpPost(INTROSPECTION_URL);
             post.setHeader("Content-Type", "application/x-www-form-urlencoded");
             String body = "client_id=" + CLIENT_ID + "&client_secret=" + CLIENT_SECRET + "&token=" + token;
             post.setEntity(new StringEntity(body));
-            
+
+            logger.info("Sending introspection request to: {}", INTROSPECTION_URL);
+
             try (CloseableHttpResponse response = client.execute(post)) {
                 String responseBody = EntityUtils.toString(response.getEntity());
+                int statusCode = response.getStatusLine().getStatusCode();
+
+                logger.info("Introspection response - Status: {}, Body: {}", statusCode, responseBody);
+
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode jsonNode = mapper.readTree(responseBody);
+
+                if (!jsonNode.has("active")) {
+                    logger.error("Introspection response missing 'active' field");
+                    return false;
+                }
+
                 boolean isActive = jsonNode.get("active").asBoolean();
-                
+
                 if (isActive) {
-                    logger.debug("Token introspection successful - token is active");
+                    logger.info("Token introspection successful - token is active");
                 } else {
-                    logger.debug("Token introspection indicates token is not active");
+                    logger.warn("Token introspection indicates token is not active");
                 }
                 return isActive;
             }
@@ -409,19 +459,155 @@ public class UmaKeycloakAuthInterceptor {
         return isPublic;
     }
 
+    /**
+     * Extracts permissions from an RPT token by decoding the JWT payload
+     *
+     * @param token The RPT token (JWT)
+     * @return List of permissions granted in the token
+     */
+    private List<RptPermission> extractPermissionsFromRPT(String token) {
+        List<RptPermission> permissions = new ArrayList<>();
+
+        try {
+            // JWT structure: header.payload.signature
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) {
+                logger.warn("Invalid JWT format - expected 3 parts, got {}", parts.length);
+                return permissions;
+            }
+
+            // Decode the payload (second part)
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+            logger.info("=== DECODED JWT PAYLOAD START ===");
+            logger.info("{}", payload);
+            logger.info("=== DECODED JWT PAYLOAD END ===");
+
+            // Parse JSON
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode payloadJson = mapper.readTree(payload);
+
+            // Check if authorization field exists
+            if (!payloadJson.has("authorization")) {
+                logger.warn("JWT payload does NOT contain 'authorization' field!");
+                logger.warn("Available fields: {}", payloadJson.fieldNames());
+                return permissions;
+            }
+
+            // Extract authorization.permissions
+            JsonNode authNode = payloadJson.get("authorization");
+            logger.info("Found 'authorization' field: {}", authNode.toString());
+
+            if (!authNode.has("permissions")) {
+                logger.warn("'authorization' field does NOT contain 'permissions' array!");
+                return permissions;
+            }
+
+            JsonNode permissionsNode = authNode.get("permissions");
+            logger.info("Found 'permissions' array with {} entries", permissionsNode.size());
+
+            for (JsonNode permNode : permissionsNode) {
+                RptPermission permission = new RptPermission();
+
+                if (permNode.has("rsid")) {
+                    permission.setRsid(permNode.get("rsid").asText());
+                }
+                if (permNode.has("rsname")) {
+                    permission.setRsname(permNode.get("rsname").asText());
+                }
+                if (permNode.has("scopes")) {
+                    JsonNode scopesNode = permNode.get("scopes");
+                    List<String> scopesList = new ArrayList<>();
+                    for (JsonNode scopeNode : scopesNode) {
+                        scopesList.add(scopeNode.asText());
+                    }
+                    permission.setScopes(scopesList);
+                }
+
+                permissions.add(permission);
+                logger.info("Extracted permission: rsname={}, rsid={}, scopes={}",
+                           permission.getRsname(), permission.getRsid(), permission.getScopes());
+            }
+
+            logger.info("Successfully extracted {} permissions from RPT", permissions.size());
+        } catch (Exception e) {
+            logger.error("Error extracting permissions from RPT", e);
+            logger.error("Token preview: {}...", token.substring(0, Math.min(50, token.length())));
+        }
+
+        return permissions;
+    }
+
+    /**
+     * Validates if the token has the required permission for the requested resource
+     *
+     * @param token The RPT token
+     * @param resourceName The Keycloak resource name (e.g., "PatientResource")
+     * @param requiredScope The required scope (e.g., "read")
+     * @return true if the token has the required permission
+     */
+    private boolean hasRequiredPermission(String token, String resourceName, String requiredScope) {
+        logger.info("Checking permission for resource: {}, scope: {}", resourceName, requiredScope);
+
+        List<RptPermission> permissions = extractPermissionsFromRPT(token);
+
+        logger.info("Total permissions extracted: {}", permissions.size());
+
+        for (RptPermission permission : permissions) {
+            logger.info("Checking permission - rsname: {}, scopes: {}",
+                       permission.getRsname(), permission.getScopes());
+
+            // Check if resource name matches
+            if (resourceName.equals(permission.getRsname())) {
+                logger.info("Resource name matches! Checking scopes...");
+                // Check if required scope is present
+                if (permission.getScopes() != null && permission.getScopes().contains(requiredScope)) {
+                    logger.info("✓ Permission validated: resource={}, scope={}", resourceName, requiredScope);
+                    return true;
+                } else {
+                    logger.warn("Resource name matches but required scope '{}' not found. Available scopes: {}",
+                               requiredScope, permission.getScopes());
+                }
+            } else {
+                logger.debug("Resource name mismatch: expected '{}', got '{}'",
+                            resourceName, permission.getRsname());
+            }
+        }
+
+        logger.warn("✗ Required permission NOT found: resource={}, scope={}", resourceName, requiredScope);
+        return false;
+    }
+
+    /**
+     * Represents a permission granted in an RPT token
+     */
+    public static class RptPermission {
+        private String rsid;    // Resource ID
+        private String rsname;  // Resource name
+        private List<String> scopes; // Granted scopes
+
+        public String getRsid() { return rsid; }
+        public void setRsid(String rsid) { this.rsid = rsid; }
+
+        public String getRsname() { return rsname; }
+        public void setRsname(String rsname) { this.rsname = rsname; }
+
+        public List<String> getScopes() { return scopes; }
+        public void setScopes(List<String> scopes) { this.scopes = scopes; }
+    }
+
     public static class PermissionRequest {
         private String resource_id;
         private String[] resource_scopes;
-        
+
         public PermissionRequest(String resourceIdentifier, String[] scopes) {
             this.resource_id = resourceIdentifier;
             this.resource_scopes = scopes;
         }
-        
+
         // Jackson serialization getters
         public String getResource_id() { return resource_id; }
         public String[] getResource_scopes() { return resource_scopes; }
-        
+
         // Jackson deserialization setters (required for JSON parsing)
         public void setResource_id(String resource_id) { this.resource_id = resource_id; }
         public void setResource_scopes(String[] resource_scopes) { this.resource_scopes = resource_scopes; }

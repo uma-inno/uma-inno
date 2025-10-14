@@ -49,6 +49,8 @@ services:
       SPRING_DATASOURCE_URL: "jdbc:h2:mem:testdb"
     ports:
       - "8081:8081"
+    extra_hosts:
+      - "localhost:host-gateway"
 
 volumes:
   hapi-fhir-postgres:
