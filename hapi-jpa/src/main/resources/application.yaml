@@ -342,7 +342,9 @@ hapi:
 # UMA (User-Managed Access) Configuration
 uma:
   enabled: true
-  authorization-server-uri: "http://172.29.16.64:8080/realms/FHIR-Auth"
+  # For Docker: use service name, For local dev: use localhost
+  authorization-server-uri: "http://keycloak:8080/realms/FHIR-Auth"
+  # authorization-server-uri: "http://localhost:8080/realms/FHIR-Auth"  # Uncomment for local dev
   client-id: "fhir-client"
   client-secret: "QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP"
   realm: "FHIR-Auth"
