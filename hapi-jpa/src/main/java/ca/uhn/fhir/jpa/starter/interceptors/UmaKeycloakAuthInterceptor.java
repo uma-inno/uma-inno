@@ -129,16 +129,21 @@ public class UmaKeycloakAuthInterceptor {
             case "Patient":
                 return true;
             // Uncomment these as you add them to Keycloak:
+			  case AllergyIntolerance":
+				  return true;
+			  case MedicationStatement":
+				  return true;
+			  case Condition";
+				  return true;
             // case "Observation":
             // case "Practitioner":
             // case "Organization":
             // case "Encounter":
-            // case "Condition":
             // case "Medication":
             // case "MedicationRequest":
             // case "DiagnosticReport":
             // case "ServiceRequest":
-            //     return true;
+				    return true;
             default:
                 return false;
         }
