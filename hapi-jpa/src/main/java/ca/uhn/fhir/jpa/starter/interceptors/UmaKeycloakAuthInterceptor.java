@@ -124,26 +124,15 @@ public class UmaKeycloakAuthInterceptor {
 
     private boolean shouldHandleResource(String resourceType) {
         // Only handle resources that are configured in Keycloak
-        // For now, only Patient is configured
         switch (resourceType) {
             case "Patient":
                 return true;
-            // Uncomment these as you add them to Keycloak:
             case "AllergyIntolerance":
                 return true;
             case "MedicationStatement":
                 return true;
             case "Condition":
                 return true;
-            // case "Observation":
-            // case "Practitioner":
-            // case "Organization":
-            // case "Encounter":
-            // case "Medication":
-            // case "MedicationRequest":
-            // case "DiagnosticReport":
-            // case "ServiceRequest":
-            //     return true;
             default:
                 return false;
         }
