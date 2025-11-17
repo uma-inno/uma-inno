@@ -715,7 +715,7 @@
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "**********",
+      "secret": "QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP",
       "redirectUris": [
         "http://localhost:8080/*"
       ],
@@ -736,10 +736,11 @@
       "attributes": {
         "realm_client": "false",
         "oidc.ciba.grant.enabled": "false",
-        "client.secret.creation.time": "1734354372",
+        "client.secret.creation.time": "1762203061",
         "backchannel.logout.session.required": "true",
         "post.logout.redirect.uris": "http://localhost:8080/",
         "oauth2.device.authorization.grant.enabled": "false",
+        "display.on.consent.screen": "false",
         "backchannel.logout.revoke.offline.tokens": "false"
       },
       "authenticationFlowBindingOverrides": {},
@@ -847,6 +848,81 @@
               }
             ],
             "icon_uri": ""
+          },
+          {
+            "name": "AllergyIntoleranceResource",
+            "type": "http://localhost:8080/fhir/AllergyIntolerance/*",
+            "ownerManagedAccess": true,
+            "displayName": "AllergyIntoleranceResource",
+            "attributes": {},
+            "uris": [
+              "http://localhost:8080/fhir/AllergyIntolerance/*"
+            ],
+            "scopes": [
+              {
+                "name": "read"
+              },
+              {
+                "name": "update"
+              },
+              {
+                "name": "delete"
+              },
+              {
+                "name": "create"
+              }
+            ],
+            "icon_uri": ""
+          },
+          {
+            "name": "MedicationStatementResource",
+            "type": "http://localhost:8080/fhir/MedicationStatement/*",
+            "ownerManagedAccess": true,
+            "displayName": "MedicationStatementResource",
+            "attributes": {},
+            "uris": [
+              "http://localhost:8080/fhir/MedicationStatement/*"
+            ],
+            "scopes": [
+              {
+                "name": "read"
+              },
+              {
+                "name": "update"
+              },
+              {
+                "name": "delete"
+              },
+              {
+                "name": "create"
+              }
+            ],
+            "icon_uri": ""
+          },
+          {
+            "name": "ConditionResource",
+            "type": "http://localhost:8080/fhir/Condition/*",
+            "ownerManagedAccess": true,
+            "displayName": "ConditionResource",
+            "attributes": {},
+            "uris": [
+              "http://localhost:8080/fhir/Condition/*"
+            ],
+            "scopes": [
+              {
+                "name": "read"
+              },
+              {
+                "name": "update"
+              },
+              {
+                "name": "delete"
+              },
+              {
+                "name": "create"
+              }
+            ],
+            "icon_uri": ""
           }
         ],
         "policies": [
@@ -867,6 +943,39 @@
             "decisionStrategy": "UNANIMOUS",
             "config": {
               "resources": "[\"PatientResource\"]",
+              "applyPolicies": "[\"Allow fhir-client Policy\"]"
+            }
+          },
+          {
+            "name": "AllergyIntoleranceResource Permission",
+            "description": "",
+            "type": "resource",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "resources": "[\"AllergyIntoleranceResource\"]",
+              "applyPolicies": "[\"Allow fhir-client Policy\"]"
+            }
+          },
+          {
+            "name": "MedicationStatementResource Permission",
+            "description": "",
+            "type": "resource",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "resources": "[\"MedicationStatementResource\"]",
+              "applyPolicies": "[\"Allow fhir-client Policy\"]"
+            }
+          },
+          {
+            "name": "ConditionResource Permission",
+            "description": "",
+            "type": "resource",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "resources": "[\"ConditionResource\"]",
               "applyPolicies": "[\"Allow fhir-client Policy\"]"
             }
           }
@@ -1702,14 +1811,14 @@
         "subComponents": {},
         "config": {
           "allowed-protocol-mapper-types": [
-            "oidc-full-name-mapper",
-            "saml-user-property-mapper",
-            "oidc-usermodel-property-mapper",
-            "saml-role-list-mapper",
-            "oidc-address-mapper",
-            "oidc-usermodel-attribute-mapper",
             "saml-user-attribute-mapper",
-            "oidc-sha256-pairwise-sub-mapper"
+            "oidc-usermodel-attribute-mapper",
+            "oidc-usermodel-property-mapper",
+            "oidc-sha256-pairwise-sub-mapper",
+            "oidc-full-name-mapper",
+            "saml-role-list-mapper",
+            "saml-user-property-mapper",
+            "oidc-address-mapper"
           ]
         }
       },
@@ -1741,14 +1850,14 @@
         "subComponents": {},
         "config": {
           "allowed-protocol-mapper-types": [
-            "saml-user-attribute-mapper",
             "oidc-sha256-pairwise-sub-mapper",
-            "oidc-usermodel-property-mapper",
-            "oidc-usermodel-attribute-mapper",
-            "oidc-full-name-mapper",
-            "oidc-address-mapper",
             "saml-role-list-mapper",
-            "saml-user-property-mapper"
+            "oidc-address-mapper",
+            "saml-user-property-mapper",
+            "oidc-full-name-mapper",
+            "oidc-usermodel-property-mapper",
+            "saml-user-attribute-mapper",
+            "oidc-usermodel-attribute-mapper"
           ]
         }
       },
