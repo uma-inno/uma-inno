@@ -85,6 +85,33 @@
         "clientRole": false,
         "containerId": "27d57df0-0794-4e96-92ac-85b802200864",
         "attributes": {}
+      },
+      {
+        "id": "b627b089-53d9-44f8-a4af-5e013848ac9a",
+        "name": "Doctor",
+        "description": "Healthcare provider who can access patient data with permission",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "27d57df0-0794-4e96-92ac-85b802200864",
+        "attributes": {}
+      },
+      {
+        "id": "1c35c95b-4c5c-4645-8eba-ef030193f04e",
+        "name": "Patient",
+        "description": "Standard patient user who can access their own health data",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "27d57df0-0794-4e96-92ac-85b802200864",
+        "attributes": {}
+      },
+      {
+        "id": "9db8f464-eccb-4967-be8d-7e7d934a661e",
+        "name": "Administrator",
+        "description": "System administrator with full access to all resources",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "27d57df0-0794-4e96-92ac-85b802200864",
+        "attributes": {}
       }
     ],
     "client": {
@@ -827,7 +854,7 @@
           {
             "name": "PatientResource",
             "type": "http://localhost:8080/fhir/Patient/*",
-            "ownerManagedAccess": true,
+            "ownerManagedAccess": false,
             "displayName": "PatientResource",
             "attributes": {},
             "uris": [
@@ -852,7 +879,7 @@
           {
             "name": "AllergyIntoleranceResource",
             "type": "http://localhost:8080/fhir/AllergyIntolerance/*",
-            "ownerManagedAccess": true,
+            "ownerManagedAccess": false,
             "displayName": "AllergyIntoleranceResource",
             "attributes": {},
             "uris": [
@@ -877,7 +904,7 @@
           {
             "name": "MedicationStatementResource",
             "type": "http://localhost:8080/fhir/MedicationStatement/*",
-            "ownerManagedAccess": true,
+            "ownerManagedAccess": false,
             "displayName": "MedicationStatementResource",
             "attributes": {},
             "uris": [
@@ -902,7 +929,7 @@
           {
             "name": "ConditionResource",
             "type": "http://localhost:8080/fhir/Condition/*",
-            "ownerManagedAccess": true,
+            "ownerManagedAccess": false,
             "displayName": "ConditionResource",
             "attributes": {},
             "uris": [
@@ -936,47 +963,213 @@
             }
           },
           {
-            "name": "PatientResource Permission",
-            "description": "",
-            "type": "resource",
+            "name": "Patient Access Policy",
+            "description": "Policy for users with Patient role",
+            "type": "role",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "fetchRoles": "false",
+              "roles": "[{\"id\":\"Patient\",\"required\":true}]"
+            }
+          },
+          {
+            "name": "Doctor Access Policy",
+            "description": "Policy for users with Doctor role",
+            "type": "role",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "fetchRoles": "false",
+              "roles": "[{\"id\":\"Doctor\",\"required\":true}]"
+            }
+          },
+          {
+            "name": "Administrator Access Policy",
+            "description": "Policy for administrators with full access",
+            "type": "role",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "fetchRoles": "false",
+              "roles": "[{\"id\":\"Administrator\",\"required\":true}]"
+            }
+          },
+          {
+            "name": "Patient or Admin Access",
+            "description": "Allows patients to access their own data or admins to access all",
+            "type": "aggregate",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "applyPolicies": "[\"Patient Access Policy\",\"Administrator Access Policy\"]"
+            }
+          },
+          {
+            "name": "Doctor or Admin Access",
+            "description": "Allows doctors and admins to access patient data",
+            "type": "aggregate",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "applyPolicies": "[\"Doctor Access Policy\",\"Administrator Access Policy\"]"
+            }
+          },
+          {
+            "name": "Patient Read Own Data",
+            "description": "Patients can read their own Patient resource",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "defaultResourceType": "",
+              "resources": "[\"PatientResource\"]",
+              "scopes": "[\"read\"]",
+              "applyPolicies": "[\"Patient or Admin Access\"]"
+            }
+          },
+          {
+            "name": "Patient Write Own Data",
+            "description": "Patients can update their own Patient resource",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"PatientResource\"]",
+              "scopes": "[\"update\"]",
+              "applyPolicies": "[\"Patient or Admin Access\"]"
+            }
+          },
+          {
+            "name": "Doctor Read Patient Data",
+            "description": "Doctors can read Patient resources with permission",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"PatientResource\"]",
+              "scopes": "[\"read\"]",
+              "applyPolicies": "[\"Doctor or Admin Access\"]"
+            }
+          },
+          {
+            "name": "Admin Full Patient Access",
+            "description": "Admins have full access to Patient resources",
+            "type": "scope",
             "logic": "POSITIVE",
             "decisionStrategy": "UNANIMOUS",
             "config": {
               "resources": "[\"PatientResource\"]",
-              "applyPolicies": "[\"Allow fhir-client Policy\"]"
+              "scopes": "[\"delete\",\"create\",\"update\",\"read\"]",
+              "applyPolicies": "[\"Administrator Access Policy\"]"
             }
           },
           {
-            "name": "AllergyIntoleranceResource Permission",
-            "description": "",
-            "type": "resource",
+            "name": "Patient Read Own Allergies",
+            "description": "Patients can read their own allergy information",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"AllergyIntoleranceResource\"]",
+              "scopes": "[\"read\"]",
+              "applyPolicies": "[\"Patient or Admin Access\"]"
+            }
+          },
+          {
+            "name": "Doctor Manage Allergies",
+            "description": "Doctors can read/create/update allergy records",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"AllergyIntoleranceResource\"]",
+              "scopes": "[\"create\",\"update\",\"read\"]",
+              "applyPolicies": "[\"Doctor or Admin Access\"]"
+            }
+          },
+          {
+            "name": "Admin Full Allergy Access",
+            "description": "Admins have full access to allergy records",
+            "type": "scope",
             "logic": "POSITIVE",
             "decisionStrategy": "UNANIMOUS",
             "config": {
               "resources": "[\"AllergyIntoleranceResource\"]",
-              "applyPolicies": "[\"Allow fhir-client Policy\"]"
+              "scopes": "[\"delete\",\"create\",\"update\",\"read\"]",
+              "applyPolicies": "[\"Administrator Access Policy\"]"
             }
           },
           {
-            "name": "MedicationStatementResource Permission",
-            "description": "",
-            "type": "resource",
+            "name": "Patient Read Own Conditions",
+            "description": "Patients can read their own medical conditions",
+            "type": "scope",
             "logic": "POSITIVE",
-            "decisionStrategy": "UNANIMOUS",
+            "decisionStrategy": "AFFIRMATIVE",
             "config": {
-              "resources": "[\"MedicationStatementResource\"]",
-              "applyPolicies": "[\"Allow fhir-client Policy\"]"
+              "resources": "[\"ConditionResource\"]",
+              "scopes": "[\"read\"]",
+              "applyPolicies": "[\"Patient or Admin Access\"]"
             }
           },
           {
-            "name": "ConditionResource Permission",
-            "description": "",
-            "type": "resource",
+            "name": "Doctor Manage Conditions",
+            "description": "Doctors can read/create/update Conditions",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"ConditionResource\"]",
+              "scopes": "[\"create\",\"update\",\"read\"]",
+              "applyPolicies": "[\"Doctor or Admin Access\"]"
+            }
+          },
+          {
+            "name": "Admin Full Condition Access",
+            "description": "Admins have full access to Conditions",
+            "type": "scope",
             "logic": "POSITIVE",
             "decisionStrategy": "UNANIMOUS",
             "config": {
               "resources": "[\"ConditionResource\"]",
-              "applyPolicies": "[\"Allow fhir-client Policy\"]"
+              "scopes": "[\"delete\",\"create\",\"update\",\"read\"]",
+              "applyPolicies": "[\"Administrator Access Policy\"]"
+            }
+          },
+          {
+            "name": "Patient Read Own Medications",
+            "description": "Patients can read their own medication records",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"MedicationStatementResource\"]",
+              "scopes": "[\"read\"]",
+              "applyPolicies": "[\"Patient or Admin Access\"]"
+            }
+          },
+          {
+            "name": "Doctor Manage Medications",
+            "description": "Doctors can read/create/update medication statements",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"MedicationStatementResource\"]",
+              "scopes": "[\"create\",\"update\",\"read\"]",
+              "applyPolicies": "[\"Doctor or Admin Access\"]"
+            }
+          },
+          {
+            "name": "Admin Full Medication Access",
+            "description": "Admins have full access to medication records",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "resources": "[\"MedicationStatementResource\"]",
+              "scopes": "[\"delete\",\"create\",\"update\",\"read\"]",
+              "applyPolicies": "[\"Administrator Access Policy\"]"
             }
           }
         ],
@@ -994,7 +1187,7 @@
             "name": "delete"
           }
         ],
-        "decisionStrategy": "UNANIMOUS"
+        "decisionStrategy": "AFFIRMATIVE"
       }
     },
     {
@@ -1811,14 +2004,14 @@
         "subComponents": {},
         "config": {
           "allowed-protocol-mapper-types": [
-            "saml-user-attribute-mapper",
+            "oidc-address-mapper",
             "oidc-usermodel-attribute-mapper",
-            "oidc-usermodel-property-mapper",
+            "saml-user-property-mapper",
             "oidc-sha256-pairwise-sub-mapper",
             "oidc-full-name-mapper",
-            "saml-role-list-mapper",
-            "saml-user-property-mapper",
-            "oidc-address-mapper"
+            "saml-user-attribute-mapper",
+            "oidc-usermodel-property-mapper",
+            "saml-role-list-mapper"
           ]
         }
       },
@@ -1850,14 +2043,14 @@
         "subComponents": {},
         "config": {
           "allowed-protocol-mapper-types": [
-            "oidc-sha256-pairwise-sub-mapper",
-            "saml-role-list-mapper",
-            "oidc-address-mapper",
-            "saml-user-property-mapper",
             "oidc-full-name-mapper",
             "oidc-usermodel-property-mapper",
+            "oidc-sha256-pairwise-sub-mapper",
+            "saml-role-list-mapper",
             "saml-user-attribute-mapper",
-            "oidc-usermodel-attribute-mapper"
+            "oidc-address-mapper",
+            "oidc-usermodel-attribute-mapper",
+            "saml-user-property-mapper"
           ]
         }
       },
