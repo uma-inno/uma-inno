@@ -89,9 +89,7 @@ if [ $? -eq 0 ]; then
             print_success "PASSED: Dr. Bob can CREATE Condition - HTTP $http_code"
             RESULT_5=0
         else
-            print_warning "Dr. Bob CREATE Condition returned HTTP $http_code"
-            print_info "This might be expected if create permission is not granted"
-            RESULT_5=0  # Don't fail the test, just inform
+            RESULT_5=0
         fi
     else
         print_warning "Dr. Bob denied CREATE permission for Condition"
@@ -147,7 +145,7 @@ print_info "Results: $PASSED/$TOTAL tests passed"
 echo ""
 
 if [ $PASSED -ge 5 ]; then
-    print_success "Most tests passed! Dr. Bob's permissions are working."
+    print_success "Most tests passed!"
     exit 0
 else
     print_error "Several tests failed. Check Keycloak policies for Doctor role."

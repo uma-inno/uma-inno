@@ -48,7 +48,6 @@ if [ $? -eq 0 ]; then
 
         if [ $? -eq 0 ]; then
             print_success "PASSED: Jan has DELETE permission (got RPT)"
-            print_info "Note: Not actually deleting data, just verifying permission"
             ((PASSED_TESTS++))
         else
             print_error "FAILED: Jan should have DELETE permission"

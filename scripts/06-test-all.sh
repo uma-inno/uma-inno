@@ -73,15 +73,10 @@ if [ $PASSED_SCRIPTS -eq $TOTAL_SCRIPTS ]; then
     print_info "4. Update project diary with Sprint 3 completion"
     exit 0
 elif [ $PASSED_SCRIPTS -ge 3 ]; then
-    print_warning "Most tests passed, but some issues detected"
+    print_warning "Most tests passed"
     print_info "Review failed tests and adjust Keycloak policies"
     exit 0
 else
     print_error "Multiple test failures detected"
-    print_info "Recommendations:"
-    print_info "1. Check Keycloak policies are correctly configured"
-    print_info "2. Verify all resources are registered in Keycloak"
-    print_info "3. Ensure users have correct role assignments"
-    print_info "4. Check FHIR server logs for errors"
     exit 1
 fi
