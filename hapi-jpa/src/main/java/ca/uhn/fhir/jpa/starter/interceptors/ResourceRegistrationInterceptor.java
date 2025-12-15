@@ -112,13 +112,25 @@ public class ResourceRegistrationInterceptor {
         // The owner is the patient's Keycloak ID
         String patientRef = extractPatientReference(theResource);
         if (patientRef != null) {
-            // TODO: Look up patient and get their Keycloak ID
-            // For now, use system owner
             log.info("Clinical resource references patient: {}", patientRef);
+            
+            // Extract patient ID from reference (e.g., "Patient/452" -> "452")
+            String patientId = patientRef.contains("/") 
+                ? patientRef.substring(patientRef.lastIndexOf("/") + 1)
+                : patientRef;
+            
+            // Look up the patient's Keycloak ID
+            String patientKeycloakId = keycloakResourceService.getPatientKeycloakId(patientId);
+            if (patientKeycloakId != null) {
+                log.info("Found patient's Keycloak ID: {}", patientKeycloakId);
+                return patientKeycloakId;
+            }
+            log.warn("Could not find Keycloak ID for patient: {}", patientRef);
         }
 
-        // Default to system owner for clinical resources without patient link
-        return keycloakResourceService.getSystemOwnerId();
+        // Default to creator ID for clinical resources without patient link
+        log.info("Using creator as owner for clinical resource");
+        return creatorId;
     }
 
     /**

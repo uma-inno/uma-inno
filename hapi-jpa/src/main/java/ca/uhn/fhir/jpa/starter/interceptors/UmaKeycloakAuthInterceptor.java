@@ -9,6 +9,7 @@ import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -60,6 +61,15 @@ public class UmaKeycloakAuthInterceptor {
                 return; // Let unconfigured resources pass through
             }
 
+            // FOURTH: For CREATE (POST) operations, skip authentication entirely
+            // The resource doesn't exist yet, so it can't have permissions
+            // The ResourceRegistrationInterceptor will register it AFTER creation
+            String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
+            if ("POST".equals(httpMethod)) {
+                logger.info("Skipping authentication for CREATE operation (POST) - resource doesn't exist yet");
+                return; // Allow creation to proceed without authentication
+            }
+
             logger.info("Applying UMA authentication to {} resource", resourceType);
 
             String authHeader = theRequestDetails.getHeader("Authorization");
@@ -80,18 +90,22 @@ public class UmaKeycloakAuthInterceptor {
             }
 
             // SECOND: Check if token has required permissions for this resource
-            String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
-
-            // IMPORTANT: For CREATE (POST) operations, skip permission check
-            // The resource doesn't exist yet, so it can't have permissions
-            // The ResourceRegistrationInterceptor will register it AFTER creation
-            if ("POST".equals(httpMethod)) {
-                logger.info("Skipping permission check for CREATE operation (POST) - resource doesn't exist yet");
-                return; // Allow creation to proceed
-            }
 
             String[] requiredScopes = mapHttpMethodToScopes(httpMethod);
-            String resourceName = mapFhirResourceToKeycloakResource(resourceType);
+            
+            // Determine if this is instance-level (has ID) or type-level (no ID)
+            String resourceId = theRequestDetails.getId() != null 
+                ? theRequestDetails.getId().getIdPart() : null;
+            String resourceName;
+            if (resourceId != null) {
+                // Instance-level: use "Patient/XX" format 
+                resourceName = resourceType + "/" + resourceId;
+                logger.info("Instance-level permission check for: {}", resourceName);
+            } else {
+                // Type-level: use "PatientResource" format
+                resourceName = mapFhirResourceToKeycloakResource(resourceType);
+                logger.info("Type-level permission check for: {}", resourceName);
+            }
 
             logger.info("=== PERMISSION CHECK START ===");
             logger.info("HTTP Method: {}, Required Scopes: {}, Resource Name: {}",
@@ -169,8 +183,8 @@ public class UmaKeycloakAuthInterceptor {
     private String requestPermissionTicket(RequestDetails theRequestDetails) {
         try {
             PermissionRequest permissionRequest = buildPermissionRequest(theRequestDetails);
-            logger.debug("Built permission request: resourceId={}, scopes={}", 
-                        permissionRequest.getResource_id(), 
+            logger.debug("Built permission request: resourceId={}, scopes={}",
+                        permissionRequest.getResource_id(),
                         String.join(",", permissionRequest.getResource_scopes()));
             
             try (CloseableHttpClient client = HttpClients.createDefault()) {
@@ -219,20 +233,93 @@ public class UmaKeycloakAuthInterceptor {
         String resourcePath = theRequestDetails.getRequestPath();
         String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
         String resourceType = extractResourceType(resourcePath);
-        String resourceId = extractResourceId(resourcePath);
-        
-        // Map FHIR resource to Keycloak resource
-        String resourceIdentifier = mapFhirResourceToKeycloakResource(resourceType);
-        
+
+        // Use theRequestDetails.getId() for reliable resource ID extraction (same as handleRequest)
+        String resourceId = theRequestDetails.getId() != null
+            ? theRequestDetails.getId().getIdPart() : null;
+
+        // Use instance-level resource identifier if ID present, otherwise type-level
+        String resourceName;
+        if (resourceId != null) {
+            // Instance-level: use "Patient/XX" format (matches Keycloak UMA registration)
+            resourceName = resourceType + "/" + resourceId;
+            logger.info("PERMISSION REQUEST: Using INSTANCE-LEVEL resource: {}", resourceName);
+        } else {
+            // Type-level: use "PatientResource" format
+            resourceName = mapFhirResourceToKeycloakResource(resourceType);
+            logger.info("PERMISSION REQUEST: Using TYPE-LEVEL resource: {}", resourceName);
+        }
+
+        // Look up the resource UUID from Keycloak
+        // Keycloak's Protection API requires the UUID, not the name
+        String resourceUuid = lookupResourceUuid(resourceName);
+        if (resourceUuid == null) {
+            logger.warn("Could not find resource UUID for: {}", resourceName);
+            // Fall back to using the resource name (will likely fail)
+            resourceUuid = resourceName;
+        }
+
         // Map HTTP method to scopes
         String[] scopes = mapHttpMethodToScopes(httpMethod);
-        
-        logger.info("Created resource identifier for UMA: {} (mapped from FHIR resource: {})", resourceIdentifier, resourceType);
-        logger.debug("Building permission request - Path: {}, Resource: {}, ID: {}, Method: {}, Scopes: {}", 
+
+        logger.info("Using resource UUID: {} for resource name: {}", resourceUuid, resourceName);
+        logger.debug("Building permission request - Path: {}, Resource: {}, ID: {}, Method: {}, Scopes: {}",
                     resourcePath, resourceType, resourceId, httpMethod, String.join(",", scopes));
-        
-        // Use the scopes based on HTTP method
-        return new PermissionRequest(resourceIdentifier, scopes);
+
+        // Use the resource UUID in the permission request
+        return new PermissionRequest(resourceUuid, scopes);
+    }
+
+    /**
+     * Look up the UUID of a resource in Keycloak by its name
+     *
+     * @param resourceName The resource name (e.g., "Patient/352" or "PatientResource")
+     * @return The resource UUID, or null if not found
+     */
+    private String lookupResourceUuid(String resourceName) {
+        try {
+            String protectionToken = getProtectionApiToken();
+            if (protectionToken == null) {
+                logger.error("Failed to obtain protection API token for resource lookup");
+                return null;
+            }
+
+            // Keycloak's resource search endpoint - use GET, not POST
+            String resourceSearchUrl = AUTHORIZATION_SERVER_URI + "/authz/protection/resource_set?name=" + resourceName;
+
+            try (CloseableHttpClient client = HttpClients.createDefault()) {
+                HttpGet get = new HttpGet(resourceSearchUrl);
+                get.setHeader("Authorization", "Bearer " + protectionToken);
+
+                try (CloseableHttpResponse response = client.execute(get)) {
+                    String responseBody = EntityUtils.toString(response.getEntity());
+                    int statusCode = response.getStatusLine().getStatusCode();
+
+                    logger.debug("Resource lookup response - Status: {}, Body: {}", statusCode, responseBody);
+
+                    if (statusCode == 200) {
+                        ObjectMapper mapper = new ObjectMapper();
+                        JsonNode jsonResponse = mapper.readTree(responseBody);
+
+                        // The response is an array of resource IDs
+                        if (jsonResponse.isArray() && jsonResponse.size() > 0) {
+                            String uuid = jsonResponse.get(0).asText();
+                            logger.info("Found resource UUID: {} for name: {}", uuid, resourceName);
+                            return uuid;
+                        } else {
+                            logger.warn("No resource found with name: {}", resourceName);
+                            return null;
+                        }
+                    } else {
+                        logger.error("Resource lookup failed - Status: {}, Response: {}", statusCode, responseBody);
+                        return null;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error looking up resource UUID for: {}", resourceName, e);
+            return null;
+        }
     }
 
     private String mapFhirResourceToKeycloakResource(String fhirResourceType) {
@@ -543,7 +630,7 @@ public class UmaKeycloakAuthInterceptor {
      * Validates if the token has the required permission for the requested resource
      *
      * @param token The RPT token
-     * @param resourceName The Keycloak resource name (e.g., "PatientResource")
+     * @param resourceName The Keycloak resource name (e.g., "Patient/52" or "PatientResource")
      * @param requiredScope The required scope (e.g., "read")
      * @return true if the token has the required permission
      */
@@ -554,11 +641,13 @@ public class UmaKeycloakAuthInterceptor {
 
         logger.info("Total permissions extracted: {}", permissions.size());
 
+        // STRICT INSTANCE-LEVEL: Only accept exact resource name match
+        // e.g., if checking for "Patient/52", only "Patient/52" is accepted, NOT "PatientResource"
         for (RptPermission permission : permissions) {
             logger.info("Checking permission - rsname: {}, scopes: {}",
                        permission.getRsname(), permission.getScopes());
 
-            // Check if resource name matches
+            // Check if resource name matches EXACTLY (strict instance-level)
             if (resourceName.equals(permission.getRsname())) {
                 logger.info("Resource name matches! Checking scopes...");
                 // Check if required scope is present
@@ -598,11 +687,12 @@ public class UmaKeycloakAuthInterceptor {
     }
 
     public static class PermissionRequest {
+        // Keycloak expects the UUID in resource_id field
         private String resource_id;
         private String[] resource_scopes;
 
-        public PermissionRequest(String resourceIdentifier, String[] scopes) {
-            this.resource_id = resourceIdentifier;
+        public PermissionRequest(String resourceId, String[] scopes) {
+            this.resource_id = resourceId;
             this.resource_scopes = scopes;
         }
 

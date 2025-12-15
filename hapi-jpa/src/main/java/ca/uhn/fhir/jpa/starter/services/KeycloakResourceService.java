@@ -1,11 +1,15 @@
 package ca.uhn.fhir.jpa.starter.services;
 
+import ca.uhn.fhir.jpa.api.dao.IFhirResourceDao;
+import org.hl7.fhir.r5.model.Patient;
+import org.hl7.fhir.r5.model.IdType;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.admin.client.resource.AuthorizationResource;
 import org.keycloak.representations.idm.authorization.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +25,9 @@ import java.util.Set;
 public class KeycloakResourceService {
 
     private static final Logger log = LoggerFactory.getLogger(KeycloakResourceService.class);
+
+    @Autowired(required = false)
+    private IFhirResourceDao<Patient> patientDao;
 
     @Value("${keycloak.auth-server-url}")
     private String authServerUrl;
@@ -149,16 +156,24 @@ public class KeycloakResourceService {
             policy.getConfig().put("users", "[\"" + creatorId + "\"]");
 
             Response policyResponse = authz.policies().create(policy);
+            int policyStatus = policyResponse.getStatus();
 
-            if (policyResponse.getStatus() != 201) {
+            if (policyStatus != 201) {
                 log.error("Failed to create policy for creator {} (status {})",
-                    creatorId, policyResponse.getStatus());
+                    creatorId, policyStatus);
                 policyResponse.close();
                 return;
             }
 
-            // Extract policy ID from Location header
-            String location = policyResponse.getHeaderString("Location");
+            // Extract policy ID from Location
+            java.net.URI locationUri = policyResponse.getLocation();
+            if (locationUri == null) {
+                log.error("Policy created (status 201) but Location is missing");
+                policyResponse.close();
+                return;
+            }
+
+            String location = locationUri.toString();
             String policyId = location.substring(location.lastIndexOf('/') + 1);
             policyResponse.close();
 
@@ -198,6 +213,35 @@ public class KeycloakResourceService {
      */
     public String getSystemOwnerId() {
         return systemOwnerId;
+    }
+
+    /**
+     * Look up a Patient's Keycloak UUID from the FHIR database.
+     * Searches for an identifier with system "keycloak-uuid".
+     *
+     * @param patientId The FHIR Patient resource ID
+     * @return The Keycloak user UUID, or null if not found
+     */
+    public String getPatientKeycloakId(String patientId) {
+        if (patientDao == null) {
+            log.warn("Patient DAO not available, cannot look up Keycloak ID");
+            return null;
+        }
+
+        try {
+            Patient patient = patientDao.read(new IdType("Patient", patientId), null);
+            if (patient != null && patient.getIdentifier() != null) {
+                for (var identifier : patient.getIdentifier()) {
+                    if ("keycloak-uuid".equals(identifier.getSystem())) {
+                        return identifier.getValue();
+                    }
+                }
+            }
+            log.warn("Patient {} does not have a keycloak-uuid identifier", patientId);
+        } catch (Exception e) {
+            log.error("Error looking up Patient {}: {}", patientId, e.getMessage());
+        }
+        return null;
     }
 
     private ScopeRepresentation createScope(String name) {
