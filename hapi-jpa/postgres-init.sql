@@ -1,3 +1,4 @@
+-- noinspection SqlNoDataSourceInspectionForFile
 CREATE TABLE HFJ_RESOURCE (
     PARTITION_ID bigint,
     PARTITION_DATE timestamp,

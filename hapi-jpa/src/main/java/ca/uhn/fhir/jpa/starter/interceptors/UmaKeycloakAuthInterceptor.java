@@ -81,6 +81,15 @@ public class UmaKeycloakAuthInterceptor {
 
             // SECOND: Check if token has required permissions for this resource
             String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
+
+            // IMPORTANT: For CREATE (POST) operations, skip permission check
+            // The resource doesn't exist yet, so it can't have permissions
+            // The ResourceRegistrationInterceptor will register it AFTER creation
+            if ("POST".equals(httpMethod)) {
+                logger.info("Skipping permission check for CREATE operation (POST) - resource doesn't exist yet");
+                return; // Allow creation to proceed
+            }
+
             String[] requiredScopes = mapHttpMethodToScopes(httpMethod);
             String resourceName = mapFhirResourceToKeycloakResource(resourceType);
 
@@ -123,7 +132,6 @@ public class UmaKeycloakAuthInterceptor {
     }
 
     private boolean shouldHandleResource(String resourceType) {
-        // Only handle resources that are configured in Keycloak
         switch (resourceType) {
             case "Patient":
                 return true;

@@ -17,7 +17,7 @@ HTTP/1.1 200 OK
 Content-Type: application/json
 
 {
-  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI...",
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI...", ->(identity Alice)
   "expires_in": 300,
   "refresh_expires_in": 1800,
   "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI...",
