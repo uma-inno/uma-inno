@@ -3,7 +3,12 @@ package ca.uhn.fhir.jpa.starter.interceptors;
 import ca.uhn.fhir.interceptor.api.Hook;
 import ca.uhn.fhir.interceptor.api.Interceptor;
 import ca.uhn.fhir.interceptor.api.Pointcut;
+import ca.uhn.fhir.jpa.api.dao.IFhirResourceDao;
+import ca.uhn.fhir.jpa.searchparam.SearchParameterMap;
+import ca.uhn.fhir.rest.api.server.IBundleProvider;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
+import ca.uhn.fhir.rest.param.TokenParam;
+import ca.uhn.fhir.rest.server.exceptions.UnprocessableEntityException;
 import ca.uhn.fhir.jpa.starter.services.KeycloakResourceService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,6 +36,63 @@ public class ResourceRegistrationInterceptor {
 
     @Autowired
     private KeycloakResourceService keycloakResourceService;
+
+    @Autowired(required = false)
+    private IFhirResourceDao<Patient> patientDao;
+
+    /**
+     * Hook that fires BEFORE a resource is stored.
+     * Validates that a Patient with the same keycloak-uuid doesn't already exist.
+     */
+    @Hook(Pointcut.STORAGE_PRESTORAGE_RESOURCE_CREATED)
+    public void validatePatientUnique(IBaseResource theResource, RequestDetails theRequestDetails) {
+        if (theResource == null || !"Patient".equals(theResource.fhirType())) {
+            return;
+        }
+
+        Patient patient = (Patient) theResource;
+        String keycloakId = extractKeycloakIdFromPatient(patient);
+
+        if (keycloakId == null) {
+            log.debug("Patient has no keycloak-uuid, skipping uniqueness check");
+            return;
+        }
+
+        // Check if a Patient with this keycloak-uuid already exists
+        Patient existingPatient = findPatientByKeycloakId(keycloakId);
+        if (existingPatient != null) {
+            String existingId = existingPatient.getIdElement().getIdPart();
+            log.warn("Duplicate Patient creation attempt for keycloak-uuid: {}. Existing Patient: {}", 
+                    keycloakId, existingId);
+            throw new UnprocessableEntityException(
+                "A Patient resource already exists for this Keycloak user. Existing Patient ID: " + existingId);
+        }
+
+        log.info("Patient uniqueness validated for keycloak-uuid: {}", keycloakId);
+    }
+
+    /**
+     * Find a Patient by their keycloak-uuid identifier.
+     */
+    private Patient findPatientByKeycloakId(String keycloakId) {
+        if (patientDao == null) {
+            log.warn("Patient DAO not available, cannot check for existing patient");
+            return null;
+        }
+
+        try {
+            SearchParameterMap searchParams = new SearchParameterMap();
+            searchParams.add(Patient.SP_IDENTIFIER, new TokenParam("keycloak-uuid", keycloakId));
+            
+            IBundleProvider results = patientDao.search(searchParams, null);
+            if (results != null && !results.isEmpty()) {
+                return (Patient) results.getResources(0, 1).get(0);
+            }
+        } catch (Exception e) {
+            log.error("Error searching for existing Patient with keycloak-uuid {}: {}", keycloakId, e.getMessage());
+        }
+        return null;
+    }
 
     /**
      * Hook that fires after a resource is created.
