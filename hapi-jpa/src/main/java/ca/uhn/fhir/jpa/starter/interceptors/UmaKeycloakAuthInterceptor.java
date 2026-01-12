@@ -61,13 +61,38 @@ public class UmaKeycloakAuthInterceptor {
                 return; // Let unconfigured resources pass through
             }
 
-            // FOURTH: For CREATE (POST) operations, skip authentication entirely
-            // The resource doesn't exist yet, so it can't have permissions
-            // The ResourceRegistrationInterceptor will register it AFTER creation
+            // FOURTH: For CREATE (POST) operations, check role-based access control (RBAC)
+            // The resource doesn't exist yet, so we can't check instance-level permissions
+            // Instead, we check if the user's role allows them to create this resource type
             String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
             if ("POST".equals(httpMethod)) {
-                logger.info("Skipping authentication for CREATE operation (POST) - resource doesn't exist yet");
-                return; // Allow creation to proceed without authentication
+                logger.info("CREATE operation (POST) detected - checking role-based access control");
+
+                // Extract token
+                String authHeader = theRequestDetails.getHeader("Authorization");
+                if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                    logger.warn("No authorization token for CREATE operation");
+                    throw new AuthenticationException("Authorization token required to create resources");
+                }
+                String token = authHeader.substring(7);
+
+                // Extract roles from token
+                List<String> roles = extractRolesFromToken(token);
+                logger.info("User has {} roles: {}", roles.size(), roles);
+
+                if (roles.isEmpty()) {
+                    logger.warn("No roles found in token - denying resource creation");
+                    throw new ForbiddenOperationException("No roles found. Cannot create resources without assigned roles.");
+                }
+
+                // Check if any role allows creating this resource type
+                if (!canRoleCreateResource(roles, resourceType)) {
+                    logger.warn("User roles {} do not have permission to create resource type: {}", roles, resourceType);
+                    throw new ForbiddenOperationException("You do not have permission to create " + resourceType + " resources");
+                }
+
+                logger.info("✓ Role-based access check passed for creating {} with roles: {}", resourceType, roles);
+                return; // Allow creation to proceed
             }
 
             logger.info("Applying UMA authentication to {} resource", resourceType);
@@ -703,5 +728,95 @@ public class UmaKeycloakAuthInterceptor {
         // Jackson deserialization setters (required for JSON parsing)
         public void setResource_id(String resource_id) { this.resource_id = resource_id; }
         public void setResource_scopes(String[] resource_scopes) { this.resource_scopes = resource_scopes; }
+    }
+
+    /**
+     * Extract roles from JWT token.
+     * Keycloak stores realm roles in: realm_access.roles
+     *
+     * @param token The JWT token
+     * @return List of roles, or empty list if none found
+     */
+    private List<String> extractRolesFromToken(String token) {
+        List<String> roles = new ArrayList<>();
+
+        try {
+            // JWT: header.payload.signature
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) {
+                logger.warn("Invalid JWT format - expected 3 parts, got {}", parts.length);
+                return roles;
+            }
+
+            // Decode payload
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode payloadJson = mapper.readTree(payload);
+
+            // Extract realm_access.roles
+            if (payloadJson.has("realm_access")) {
+                JsonNode realmAccess = payloadJson.get("realm_access");
+                if (realmAccess.has("roles")) {
+                    JsonNode rolesNode = realmAccess.get("roles");
+                    for (JsonNode roleNode : rolesNode) {
+                        roles.add(roleNode.asText());
+                    }
+                    logger.info("Extracted {} roles from token: {}", roles.size(), roles);
+                }
+            } else {
+                logger.debug("Token does not contain realm_access field");
+            }
+        } catch (Exception e) {
+            logger.error("Error extracting roles from token", e);
+        }
+
+        return roles;
+    }
+
+    /**
+     * Check if any of the user's roles allow creating the specified resource type.
+     *
+     * RBAC Rules:
+     * - patient: Cannot create any resources
+     * - practitioner/doctor: Can create Patient and clinical resources
+     * - admin: Can create everything
+     *
+     * @param roles List of user's roles
+     * @param resourceType The FHIR resource type to create
+     * @return true if any role allows creation, false otherwise
+     */
+    private boolean canRoleCreateResource(List<String> roles, String resourceType) {
+        for (String role : roles) {
+            switch (role.toLowerCase()) {
+                case "patient":
+                    // Patients cannot create any resources
+                    logger.debug("Role 'patient' cannot create resources");
+                    continue;
+
+                case "doctor":
+                    // Practitioners can create Patient and clinical resources
+                    boolean canCreate = "Patient".equals(resourceType) ||
+                                      "Condition".equals(resourceType) ||
+                                      "AllergyIntolerance".equals(resourceType) ||
+
+                                      "MedicationStatement".equals(resourceType);
+                    if (canCreate) {
+                        logger.info("Role '{}' can create {}", role, resourceType);
+                        return true;
+                    }
+                    break;
+
+                case "admin":
+                    // Admins can create everything
+                    logger.info("Role 'admin' can create any resource");
+                    return true;
+
+                default:
+                    logger.debug("Unknown role '{}' - no creation permission", role);
+            }
+        }
+
+        logger.warn("No role found that allows creating {}", resourceType);
+        return false;
     }
 }
