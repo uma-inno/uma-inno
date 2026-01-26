@@ -410,6 +410,41 @@
             <version>${project.parent.version}</version>
         </dependency>
 
+        <!-- Keycloak Admin Client for resource registration -->
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-admin-client</artifactId>
+            <version>26.0.7</version>
+        </dependency>
+
+        <!-- Jakarta WS RS API (required for keycloak-admin-client) -->
+        <dependency>
+            <groupId>jakarta.ws.rs</groupId>
+            <artifactId>jakarta.ws.rs-api</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+
+        <!-- Jakarta Annotation API (required for PostConstruct) -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <version>2.1.1</version>
+        </dependency>
+
+        <!-- RESTEasy Client (Jakarta-based, version 6.x) -->
+        <dependency>
+            <groupId>org.jboss.resteasy</groupId>
+            <artifactId>resteasy-client</artifactId>
+            <version>6.2.7.Final</version>
+        </dependency>
+
+        <!-- RESTEasy Jackson Provider -->
+        <dependency>
+            <groupId>org.jboss.resteasy</groupId>
+            <artifactId>resteasy-jackson2-provider</artifactId>
+            <version>6.2.7.Final</version>
+        </dependency>
+
     </dependencies>
 
     <build>

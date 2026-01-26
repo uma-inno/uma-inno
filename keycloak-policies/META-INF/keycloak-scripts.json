@@ -1,0 +1,9 @@
+{
+  "policies": [
+    {
+      "name": "Owner Policy",
+      "fileName": "owner-policy.js",
+      "description": "Grants access to resource owners"
+    }
+  ]
+}

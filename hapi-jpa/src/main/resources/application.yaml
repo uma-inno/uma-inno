@@ -40,12 +40,12 @@ spring:
     baselineOnMigrate: true
     fail-on-missing-locations: false
   datasource:
-    url: 'jdbc:h2:file:./target/database/h2'
-    #url: 'jdbc:postgresql://localhost:5432/hapi'
+    #url: 'jdbc:h2:file:./target/database/h2'
+    url: 'jdbc:postgresql://localhost:5432/hapi'
     # DO NOT USE IN PRODUCTION
     username: admin
     password: admin
-    driverClassName: org.h2.Driver
+    driverClassName: org.postgresql.Driver
     # database connection pool size
     hikari:
       maximum-pool-size: 10
@@ -57,7 +57,7 @@ spring:
       #Hibernate dialect is automatically detected except Postgres and H2.
       #If using H2, then supply the value of ca.uhn.fhir.jpa.model.dialect.HapiFhirH2Dialect
       #If using postgres, then supply the value of ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
-      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirH2Dialect
+      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
   #      hibernate.hbm2ddl.auto: update
   #      hibernate.jdbc.batch_size: 20
   #      hibernate.cache.use_query_cache: false
@@ -260,11 +260,11 @@ hapi:
     search_prefetch_thresholds: 13,503,2003,-1
 
     # comma-separated package names, will be @ComponentScan'ed by Spring to allow for creating custom Spring beans
-    custom-bean-packages: ca.uhn.fhir.jpa.starter.interceptors
+    custom-bean-packages: ca.uhn.fhir.jpa.starter.interceptors,ca.uhn.fhir.jpa.starter.services
       # comma-separated list of fully qualified interceptor classes. 
     # classes listed here will be fetched from the Spring context when combined with 'custom-bean-packages', 
     # or will be instantiated via reflection using an no-arg contructor; then registered with the server  
-    custom-interceptor-classes: ca.uhn.fhir.jpa.starter.interceptors.JpaEntityTrackingInterceptor,ca.uhn.fhir.jpa.starter.interceptors.UmaKeycloakAuthInterceptor
+    custom-interceptor-classes: ca.uhn.fhir.jpa.starter.interceptors.JpaEntityTrackingInterceptor,ca.uhn.fhir.jpa.starter.interceptors.UmaKeycloakAuthInterceptor,ca.uhn.fhir.jpa.starter.interceptors.ResourceRegistrationInterceptor
 
     # comma-separated list of fully qualified provider classes. 
     # classes listed here will be fetched from the Spring context when combined with 'custom-bean-packages', 
@@ -291,7 +291,7 @@ hapi:
     tester:
       home:
         name: Local Tester
-        server_address: 'http://localhost:8080/fhir'
+        server_address: 'http://localhost:8081/fhir'
         refuse_to_fetch_third_party_urls: false
         fhir_version: R5
       global:
@@ -348,6 +348,13 @@ uma:
   client-id: "fhir-client"
   client-secret: "QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP"
   realm: "FHIR-Auth"
+
+# Keycloak Configuration
+keycloak:
+  auth-server-url: "http://keycloak:8080"
+  realm: "FHIR-Auth"
+  resource: "fhir-client"
+  system-owner-id: "7fc0d4bd-40ca-483e-9530-6e1fe84bded3"
   
   # Endpoints (relative to authorization-server-uri)
   endpoints:
