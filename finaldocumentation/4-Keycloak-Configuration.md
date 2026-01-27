@@ -60,10 +60,11 @@ A **realm** is an isolated administrative domain in Keycloak that manages:
 }
 ```
 
-### Creating the Realm (Manual)
+### Creating the Realm (Manual Setup)
 
-If realm import fails:
+Since we have removed the automatic realm import to avoid conflicts, follow these steps to set up Keycloak:
 
+#### Step 1: Create the Realm
 1. **Open Keycloak Admin Console**: http://localhost:8080
 2. **Login**: admin / admin
 3. **Hover over "master"** dropdown (top-left)
@@ -73,10 +74,53 @@ If realm import fails:
    - Enabled: ON
 6. **Click "Create"**
 
-**Import Existing Configuration**:
-1. Click "Browse" button
-2. Select `keycloak config/fhir-auth-config.json`
-3. Click "Create"
+#### Step 2: Import Users
+1. Ensure you are in the **FHIR-Auth** realm.
+2. Go to **Realm Settings** (left menu). On the **General** tab (default), locate the **Action** dropdown menu (top right) and select **Partial Import**.
+3. Click **Browse** and select `keycloak-config/users-import.json`.
+4. **Select Resources to Import**:
+   - Check **Import Users**
+   - Check **Import Realm Roles**
+5. **Import Strategy**: Select **Skip**.
+6. Click **Import**.
+
+#### Step 3: Import Client Configuration
+1. Remain in **Realm Settings** -> **Action** (top right) -> **Partial Import**.
+2. Click **Browse** and select `keycloak-config/fhir-client.json`.
+3. **Select Resources to Import**:
+   - Check **Import Clients**
+   - Check **Import Client Roles**
+4. **Import Strategy**: Select **Skip** (or Overwrite if updating).
+5. Click **Import**.
+
+Now you have the users (`alice`, `dr.bob`, etc.) and the `fhir-client` with most authorization settings.
+
+#### Step 4: Manually Add User-Specific Permissions
+Some instance-specific permissions for Dr. Smith and Dr. Bob need to be added manually as they reference specific resource IDs.
+
+**Navigate**: Clients -> fhir-client -> Authorization -> policies
+
+**1. Create Specific Scope Policies (if they don't exist):**
+
+*   **Dr. Bob read access Condition/554**
+    *   **Type**: Scope
+    *   **Resources**: `Condition/554`
+    *   **Scopes**: `read`
+    *   **Apply Policy**: `Dr. Bob User Policy`
+
+*   **Dr. Smith access to Patient/552**
+    *   **Type**: Scope
+    *   **Resources**: `Patient/552`
+    *   **Scopes**: `read`
+    *   **Apply Policy**: `Dr Smith User Policy`
+
+*   **Dr. Smith access to AllergyIntolerance/555**
+    *   **Type**: Scope
+    *   **Resources**: `AllergyIntolerance/555`
+    *   **Scopes**: `read`
+    *   **Apply Policy**: `Dr Smith User Policy`
+
+**Verify**: Go to the **Permissions** tab and ensure these new policies are listed and active.
 
 ---
 
@@ -516,7 +560,36 @@ keycloak:
     - ../keycloak-policies/keycloak-owner-policy.jar:/opt/keycloak/providers/keycloak-owner-policy.jar
 ```
 
-**Manual Deployment**:
+### Method 1: Automated Full Import (Recommended)
+
+This method uses the single `fhir-auth-full.json` file (exported from a working environment) which contains the entire realm configuration, including users, clients, and policies.
+
+#### Prerequisite
+1.  Copy the `fhir-auth-full.json` file to your `keycloak-config` folder on the new machine.
+
+#### Steps
+
+1.  **Configure Docker Compose**:
+    Open `hapi-jpa/docker-compose.yml` and ensure the `keycloak` service has the import volume mounted and the `--import-realm` flag set:
+
+    ```yaml
+    keycloak:
+      # ...
+      command: start-dev --features=preview --import-realm
+      volumes:
+        - ../keycloak-config:/opt/keycloak/data/import
+    ```
+    *Note: Ensure the volume path matches your actual folder name (e.g., `../keycloak-config` or `../keycloak config`).*
+
+2.  **Start the Container**:
+    Run `docker-compose up -d`.
+
+    Keycloak will detect the file in the import folder and automatically create the `FHIR-Auth` realm with all users and permissions fully restored.
+
+---
+
+### Method 2: Manual Setup (Fallback)
+If you need to configure Keycloak from scratch without an export file, follow these manual steps:
 1. Copy JAR to Keycloak providers directory:
    ```bash
    cp keycloak-owner-policy.jar /opt/keycloak/providers/
