@@ -95,12 +95,10 @@ For detailed setup instructions, see **[1.Setup-Guide.md](1-Setup-Guide.md)**.
    - Test users and their roles
    - Manual configuration guide
 
-5. **[5-Testing-Guide.md](5-Testing-Guide.md)**
-   - Automated test suite overview
-   - Manual testing procedures
+5. **Testing Guide**
+   - Use the testing guide located at `hapi-jpa/testing/curl-testing-commands.md`
+   - Contains automated test suite overview and manual testing commands
    - Demo scenarios (Alice, Bob, Jan)
-   - Test results and validation
-   - Troubleshooting test failures
 
 6. **[6-API-Reference.md](6-API-Reference.md)**
    - FHIR REST API endpoints

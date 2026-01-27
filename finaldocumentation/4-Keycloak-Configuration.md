@@ -47,6 +47,8 @@ A **realm** is an isolated administrative domain in Keycloak that manages:
 
 **Configuration Export**: `keycloak config/fhir-auth-config.json`
 
+> **Note**: A full realm export exists at `keycloak-config/keycloak-files/fhir-auth-full.json`. However, due to conflicts with default clients (like `account-console`) and issues with importing user-specific UMA policies (which require the resource owner to exist first), we use the **Manual Setup** method below to ensure a reliable deployment.
+
 **Key Settings**:
 ```json
 {
@@ -96,7 +98,22 @@ Since we have removed the automatic realm import to avoid conflicts, follow thes
 Now you have the users (`alice`, `dr.bob`, etc.) and the `fhir-client` with most authorization settings.
 
 #### Step 4: Manually Add User-Specific Permissions
-Some instance-specific permissions for Dr. Smith and Dr. Bob need to be added manually as they reference specific resource IDs.
+The following policies must be recreated manually because they reference specific resource IDs that might change or need explicit linking:
+
+1. **Dr. Bob read access Condition/554**
+   - Resource: `Condition/554`
+   - Scope: `read`
+   - Policy: `Dr. Bob User Policy`
+
+2. **Dr. Smith access to Patient/552**
+   - Resource: `Patient/552`
+   - Scope: `read`
+   - Policy: `Dr Smith User Policy`
+
+3. **Dr. Smith access to AllergyIntolerance/555**
+   - Resource: `AllergyIntolerance/555`
+   - Scope: `read`
+   - Policy: `Dr Smith User Policy`
 
 **Navigate**: Clients -> fhir-client -> Authorization -> policies
 
@@ -690,7 +707,7 @@ This configuration enables:
 
 ---
 
-**Next Steps**: Read **[5-Testing-Guide.md](5-Testing-Guide.md)** to test the complete system.
+**Next Steps**: Use the testing guide located at `hapi-jpa/testing/curl-testing-commands.md` to verify the complete system.
 
 ---
 

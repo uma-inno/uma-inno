@@ -320,7 +320,7 @@ Once the system is running successfully:
 1. **Understand the Architecture**: Read **[2-Architecture.md](2-Architecture.md)**
 2. **Learn UMA Implementation**: Read **[3-UMA-Implementation.md](3-UMA-Implementation.md)**
 3. **Configure Keycloak**: Read **[4-Keycloak-Configuration.md](4-Keycloak-Configuration.md)**
-4. **Run Tests**: Follow **[5-Testing-Guide.md](5-Testing-Guide.md)**
+4. **Run Tests**: Use the testing guide at `hapi-jpa/testing/curl-testing-commands.md`
 5. **Use the API**: Refer to **[6-API-Reference.md](6-API-Reference.md)**
 
 ---

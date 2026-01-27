@@ -443,9 +443,6 @@ The API provides:
 4. **Instance-Level Permissions**: Fine-grained access control
 5. **Patient Summary**: $everything operation for comprehensive patient data
 
----
-
-**Next Steps**: Read **[7-Future-Work.md](7-Future-Work.md)** for known limitations and future enhancements.
 
 ---
 
