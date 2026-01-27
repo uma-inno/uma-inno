@@ -1135,26 +1135,6 @@
             "config": {}
           },
           {
-            "name": "Dr. Bob User Policy",
-            "description": "",
-            "type": "user",
-            "logic": "POSITIVE",
-            "decisionStrategy": "UNANIMOUS",
-            "config": {
-              "users": "[\"dr.bob\"]"
-            }
-          },
-          {
-            "name": "Dr Smith User Policy",
-            "description": "",
-            "type": "user",
-            "logic": "POSITIVE",
-            "decisionStrategy": "UNANIMOUS",
-            "config": {
-              "users": "[\"dr.smith\"]"
-            }
-          },
-          {
             "name": "Patient Read Own Data",
             "description": "Patients can read their own Patient resource",
             "type": "scope",
@@ -1347,42 +1327,6 @@
               "scopes": "[\"write\",\"read\",\"delete\"]"
             }
           },
-          {
-            "name": "Dr.Bob read access Condition/554",
-            "description": "",
-            "type": "scope",
-            "logic": "POSITIVE",
-            "decisionStrategy": "AFFIRMATIVE",
-            "config": {
-              "resources": "[\"Condition/554\"]",
-              "scopes": "[\"read\"]",
-              "applyPolicies": "[\"Dr. Bob User Policy\"]"
-            }
-          },
-          {
-            "name": "Dr. Smith access to Patient 552 (alice)",
-            "description": "",
-            "type": "scope",
-            "logic": "POSITIVE",
-            "decisionStrategy": "AFFIRMATIVE",
-            "config": {
-              "resources": "[\"Patient/552\"]",
-              "scopes": "[\"read\"]",
-              "applyPolicies": "[\"Dr Smith User Policy\"]"
-            }
-          },
-          {
-            "name": "Dr Smith access to Allergy/555 (alice) scope",
-            "description": "",
-            "type": "scope",
-            "logic": "POSITIVE",
-            "decisionStrategy": "AFFIRMATIVE",
-            "config": {
-              "resources": "[\"AllergyIntolerance/555\"]",
-              "scopes": "[\"read\"]",
-              "applyPolicies": "[\"Dr Smith User Policy\"]"
-            }
-          }
         ],
         "scopes": [
           {
