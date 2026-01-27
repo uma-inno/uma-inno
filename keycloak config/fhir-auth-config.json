@@ -516,6 +516,94 @@
       },
       "notBefore": 0,
       "groups": []
+    },
+    {
+      "id": "5441cea9-fcf2-419e-bc20-948c3c283c98",
+      "username": "alice",
+      "email": "alice@example.com",
+      "firstName": "Alice",
+      "lastName": "Smith",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice123"
+        }
+      ],
+      "realmRoles": [
+        "default-roles-fhir-auth",
+        "uma_authorization",
+        "Patient"
+      ],
+      "notBefore": 0,
+      "groups": []
+    },
+    {
+      "id": "499edbce-5fcd-4a08-9ac0-113864a2afa3",
+      "username": "dr.smith",
+      "email": "dr.smith@example.com",
+      "firstName": "John",
+      "lastName": "Smith",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "smith123"
+        }
+      ],
+      "realmRoles": [
+        "default-roles-fhir-auth",
+        "uma_authorization",
+        "Doctor"
+      ],
+      "notBefore": 0,
+      "groups": []
+    },
+    {
+      "id": "b2c3d4e5-f6a7-48b9-c0d1-e2f3a4b5c6d7",
+      "username": "dr.bob",
+      "email": "dr.bob@example.com",
+      "firstName": "Bob",
+      "lastName": "Johnson",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob123"
+        }
+      ],
+      "realmRoles": [
+        "default-roles-fhir-auth",
+        "uma_authorization",
+        "Doctor"
+      ],
+      "notBefore": 0,
+      "groups": []
+    },
+    {
+      "id": "a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6",
+      "username": "admin",
+      "email": "admin@example.com",
+      "firstName": "Admin",
+      "lastName": "User",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123"
+        }
+      ],
+      "realmRoles": [
+        "default-roles-fhir-auth",
+        "uma_authorization",
+        "Admin"
+      ],
+      "notBefore": 0,
+      "groups": []
     }
   ],
   "scopeMappings": [
