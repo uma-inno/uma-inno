@@ -1,0 +1,85 @@
+{
+  "realm": "FHIR-Auth",
+  "users": [
+    {
+      "username": "alice",
+      "email": "alice@example.com",
+      "firstName": "Alice",
+      "lastName": "Smith",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-fhir-auth",
+        "uma_authorization",
+        "Patient"
+      ]
+    },
+    {
+      "username": "dr.smith",
+      "email": "dr.smith@example.com",
+      "firstName": "John",
+      "lastName": "Smith",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "smith123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-fhir-auth",
+        "uma_authorization",
+        "Doctor"
+      ]
+    },
+    {
+      "username": "dr.bob",
+      "email": "dr.bob@example.com",
+      "firstName": "Bob",
+      "lastName": "Johnson",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-fhir-auth",
+        "uma_authorization",
+        "Doctor"
+      ]
+    },
+    {
+      "username": "admin",
+      "email": "admin@example.com",
+      "firstName": "Admin",
+      "lastName": "User",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-fhir-auth",
+        "uma_authorization",
+        "Admin"
+      ]
+    }
+  ]
+}
