@@ -184,8 +184,8 @@
                 "query-users",
                 "manage-events",
                 "manage-identity-providers",
-                "view-events",
                 "view-clients",
+                "view-events",
                 "create-client",
                 "impersonation",
                 "query-groups",
@@ -499,8 +499,8 @@
       "id": "6c1d215e-d5cb-4117-af89-cd6988ce3138",
       "username": "service-account-fhir-client",
       "emailVerified": false,
-      "createdTimestamp": 1734354372391,
       "enabled": true,
+      "createdTimestamp": 1734354372391,
       "totp": false,
       "serviceAccountClientId": "fhir-client",
       "disableableCredentialTypes": [],
@@ -766,8 +766,8 @@
         "client.secret.creation.time": "1762203061",
         "backchannel.logout.session.required": "true",
         "post.logout.redirect.uris": "http://localhost:8080/",
-        "oauth2.device.authorization.grant.enabled": "false",
         "display.on.consent.screen": "false",
+        "oauth2.device.authorization.grant.enabled": "false",
         "backchannel.logout.revoke.offline.tokens": "false"
       },
       "authenticationFlowBindingOverrides": {},
@@ -950,6 +950,117 @@
               }
             ],
             "icon_uri": ""
+          },
+          {
+            "name": "Condition/554",
+            "type": "Condition",
+            "owner": {
+              "name": "alice"
+            },
+            "ownerManagedAccess": true,
+            "displayName": "Condition/554",
+            "attributes": {},
+            "uris": [],
+            "scopes": [
+              {
+                "name": "read"
+              },
+              {
+                "name": "write"
+              },
+              {
+                "name": "delete"
+              }
+            ]
+          },
+          {
+            "name": "AllergyIntolerance/555",
+            "type": "AllergyIntolerance",
+            "owner": {
+              "name": "alice"
+            },
+            "ownerManagedAccess": true,
+            "displayName": "AllergyIntolerance/555",
+            "attributes": {},
+            "uris": [],
+            "scopes": [
+              {
+                "name": "read"
+              },
+              {
+                "name": "write"
+              },
+              {
+                "name": "delete"
+              }
+            ]
+          },
+          {
+            "name": "Patient/602",
+            "type": "Patient",
+            "owner": {
+              "name": "system-placeholder"
+            },
+            "ownerManagedAccess": true,
+            "displayName": "Patient/602",
+            "attributes": {},
+            "uris": [],
+            "scopes": [
+              {
+                "name": "read"
+              },
+              {
+                "name": "write"
+              },
+              {
+                "name": "delete"
+              }
+            ],
+            "icon_uri": ""
+          },
+          {
+            "name": "Patient/552",
+            "type": "Patient",
+            "owner": {
+              "name": "alice"
+            },
+            "ownerManagedAccess": true,
+            "displayName": "Patient/552",
+            "attributes": {},
+            "uris": [],
+            "scopes": [
+              {
+                "name": "read"
+              },
+              {
+                "name": "write"
+              },
+              {
+                "name": "delete"
+              }
+            ]
+          },
+          {
+            "name": "AllergyIntolerance/553",
+            "type": "AllergyIntolerance",
+            "owner": {
+              "name": "alice"
+            },
+            "ownerManagedAccess": true,
+            "displayName": "AllergyIntolerance/553",
+            "attributes": {},
+            "uris": [],
+            "scopes": [
+              {
+                "name": "read"
+              },
+              {
+                "name": "write"
+              },
+              {
+                "name": "delete"
+              }
+            ]
           }
         ],
         "policies": [
@@ -1002,7 +1113,7 @@
             "logic": "POSITIVE",
             "decisionStrategy": "AFFIRMATIVE",
             "config": {
-              "applyPolicies": "[\"Patient Access Policy\",\"Administrator Access Policy\"]"
+              "applyPolicies": "[\"Administrator Access Policy\",\"Patient Access Policy\"]"
             }
           },
           {
@@ -1013,6 +1124,34 @@
             "decisionStrategy": "AFFIRMATIVE",
             "config": {
               "applyPolicies": "[\"Doctor Access Policy\",\"Administrator Access Policy\"]"
+            }
+          },
+          {
+            "name": "Resource Owner Policy",
+            "description": "Grans access to resource owners",
+            "type": "script-owner-policy.js",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {}
+          },
+          {
+            "name": "Dr. Bob User Policy",
+            "description": "",
+            "type": "user",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "users": "[\"dr.bob\"]"
+            }
+          },
+          {
+            "name": "Dr Smith User Policy",
+            "description": "",
+            "type": "user",
+            "logic": "POSITIVE",
+            "decisionStrategy": "UNANIMOUS",
+            "config": {
+              "users": "[\"dr.smith\"]"
             }
           },
           {
@@ -1060,7 +1199,7 @@
             "decisionStrategy": "UNANIMOUS",
             "config": {
               "resources": "[\"PatientResource\"]",
-              "scopes": "[\"delete\",\"create\",\"update\",\"read\"]",
+              "scopes": "[\"update\",\"read\",\"create\",\"delete\"]",
               "applyPolicies": "[\"Administrator Access Policy\"]"
             }
           },
@@ -1084,7 +1223,7 @@
             "decisionStrategy": "AFFIRMATIVE",
             "config": {
               "resources": "[\"AllergyIntoleranceResource\"]",
-              "scopes": "[\"create\",\"update\",\"read\"]",
+              "scopes": "[\"update\",\"read\",\"create\"]",
               "applyPolicies": "[\"Doctor or Admin Access\"]"
             }
           },
@@ -1096,7 +1235,7 @@
             "decisionStrategy": "UNANIMOUS",
             "config": {
               "resources": "[\"AllergyIntoleranceResource\"]",
-              "scopes": "[\"delete\",\"create\",\"update\",\"read\"]",
+              "scopes": "[\"update\",\"read\",\"create\",\"delete\"]",
               "applyPolicies": "[\"Administrator Access Policy\"]"
             }
           },
@@ -1120,7 +1259,7 @@
             "decisionStrategy": "AFFIRMATIVE",
             "config": {
               "resources": "[\"ConditionResource\"]",
-              "scopes": "[\"create\",\"update\",\"read\"]",
+              "scopes": "[\"update\",\"read\",\"create\"]",
               "applyPolicies": "[\"Doctor or Admin Access\"]"
             }
           },
@@ -1132,7 +1271,7 @@
             "decisionStrategy": "UNANIMOUS",
             "config": {
               "resources": "[\"ConditionResource\"]",
-              "scopes": "[\"delete\",\"create\",\"update\",\"read\"]",
+              "scopes": "[\"update\",\"read\",\"create\",\"delete\"]",
               "applyPolicies": "[\"Administrator Access Policy\"]"
             }
           },
@@ -1156,7 +1295,7 @@
             "decisionStrategy": "AFFIRMATIVE",
             "config": {
               "resources": "[\"MedicationStatementResource\"]",
-              "scopes": "[\"create\",\"update\",\"read\"]",
+              "scopes": "[\"update\",\"read\",\"create\"]",
               "applyPolicies": "[\"Doctor or Admin Access\"]"
             }
           },
@@ -1168,8 +1307,80 @@
             "decisionStrategy": "UNANIMOUS",
             "config": {
               "resources": "[\"MedicationStatementResource\"]",
-              "scopes": "[\"delete\",\"create\",\"update\",\"read\"]",
+              "scopes": "[\"update\",\"read\",\"create\",\"delete\"]",
               "applyPolicies": "[\"Administrator Access Policy\"]"
+            }
+          },
+          {
+            "name": "Patient Owner Access Permission",
+            "description": "Resource owners can access their resources",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "defaultResourceType": "Patient",
+              "applyPolicies": "[\"Resource Owner Policy\"]",
+              "scopes": "[\"write\",\"read\",\"delete\"]"
+            }
+          },
+          {
+            "name": "Condition Owner Access Permission",
+            "description": "Resource owners can access their resources",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "defaultResourceType": "Condition",
+              "applyPolicies": "[\"Resource Owner Policy\"]",
+              "scopes": "[\"write\",\"read\",\"delete\"]"
+            }
+          },
+          {
+            "name": "MediactionStatement Owner Access Permission",
+            "description": "Resource owners can access their resources",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "defaultResourceType": "MediactionStatement",
+              "applyPolicies": "[\"Resource Owner Policy\"]",
+              "scopes": "[\"write\",\"read\",\"delete\"]"
+            }
+          },
+          {
+            "name": "Dr.Bob read access Condition/554",
+            "description": "",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"Condition/554\"]",
+              "scopes": "[\"read\"]",
+              "applyPolicies": "[\"Dr. Bob User Policy\"]"
+            }
+          },
+          {
+            "name": "Dr. Smith access to Patient 552 (alice)",
+            "description": "",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"Patient/552\"]",
+              "scopes": "[\"read\"]",
+              "applyPolicies": "[\"Dr Smith User Policy\"]"
+            }
+          },
+          {
+            "name": "Dr Smith access to Allergy/555 (alice) scope",
+            "description": "",
+            "type": "scope",
+            "logic": "POSITIVE",
+            "decisionStrategy": "AFFIRMATIVE",
+            "config": {
+              "resources": "[\"AllergyIntolerance/555\"]",
+              "scopes": "[\"read\"]",
+              "applyPolicies": "[\"Dr Smith User Policy\"]"
             }
           }
         ],
@@ -1185,6 +1396,9 @@
           },
           {
             "name": "delete"
+          },
+          {
+            "name": "write"
           }
         ],
         "decisionStrategy": "AFFIRMATIVE"
@@ -1435,6 +1649,63 @@
             "user.attribute.region": "region",
             "access.token.claim": "true",
             "user.attribute.locality": "locality"
+          }
+        }
+      ]
+    },
+    {
+      "id": "9737a927-f817-4a2b-849f-e86ee0537138",
+      "name": "service_account",
+      "description": "Specific scope for a client enabled for service accounts",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "id": "58a22041-39ec-49fd-80d6-9724f6fa7e9f",
+          "name": "Client IP Address",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.session.note": "clientAddress",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "clientAddress",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "id": "47af43ea-4a08-40f5-8ec1-3fc940e8ab69",
+          "name": "Client ID",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.session.note": "client_id",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "client_id",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "id": "9222a270-418e-40cb-b879-a2c509117786",
+          "name": "Client Host",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.session.note": "clientHost",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "clientHost",
+            "jsonType.label": "String"
           }
         }
       ]
@@ -2004,14 +2275,14 @@
         "subComponents": {},
         "config": {
           "allowed-protocol-mapper-types": [
-            "oidc-address-mapper",
-            "oidc-usermodel-attribute-mapper",
-            "saml-user-property-mapper",
             "oidc-sha256-pairwise-sub-mapper",
             "oidc-full-name-mapper",
-            "saml-user-attribute-mapper",
             "oidc-usermodel-property-mapper",
-            "saml-role-list-mapper"
+            "oidc-address-mapper",
+            "saml-role-list-mapper",
+            "oidc-usermodel-attribute-mapper",
+            "saml-user-attribute-mapper",
+            "saml-user-property-mapper"
           ]
         }
       },
@@ -2043,12 +2314,12 @@
         "subComponents": {},
         "config": {
           "allowed-protocol-mapper-types": [
-            "oidc-full-name-mapper",
             "oidc-usermodel-property-mapper",
-            "oidc-sha256-pairwise-sub-mapper",
             "saml-role-list-mapper",
-            "saml-user-attribute-mapper",
             "oidc-address-mapper",
+            "oidc-full-name-mapper",
+            "saml-user-attribute-mapper",
+            "oidc-sha256-pairwise-sub-mapper",
             "oidc-usermodel-attribute-mapper",
             "saml-user-property-mapper"
           ]
@@ -2129,7 +2400,6 @@
     ]
   },
   "internationalizationEnabled": false,
-  "supportedLocales": [],
   "authenticationFlows": [
     {
       "id": "0662e4c9-15cc-4b92-88d5-a4d544134f4a",
@@ -2844,6 +3114,15 @@
       "config": {}
     },
     {
+      "alias": "idp_link",
+      "name": "Linking Identity Provider",
+      "providerId": "idp_link",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 120,
+      "config": {}
+    },
+    {
       "alias": "update_user_locale",
       "name": "Update User Locale",
       "providerId": "update_user_locale",
@@ -2862,22 +3141,23 @@
   "firstBrokerLoginFlow": "first broker login",
   "attributes": {
     "cibaBackchannelTokenDeliveryMode": "poll",
+    "cibaExpiresIn": "120",
     "cibaAuthRequestedUserHint": "login_hint",
+    "oauth2DeviceCodeLifespan": "600",
     "clientOfflineSessionMaxLifespan": "0",
     "oauth2DevicePollingInterval": "5",
     "clientSessionIdleTimeout": "0",
-    "clientOfflineSessionIdleTimeout": "0",
-    "cibaInterval": "5",
-    "realmReusableOtpCode": "false",
-    "cibaExpiresIn": "120",
-    "oauth2DeviceCodeLifespan": "600",
     "parRequestUriLifespan": "60",
     "clientSessionMaxLifespan": "0",
-    "organizationsEnabled": "false"
+    "clientOfflineSessionIdleTimeout": "0",
+    "cibaInterval": "5",
+    "realmReusableOtpCode": "false"
   },
-  "keycloakVersion": "26.0.7",
+  "keycloakVersion": "26.4.6",
   "userManagedAccessAllowed": false,
   "organizationsEnabled": false,
+  "verifiableCredentialsEnabled": false,
+  "adminPermissionsEnabled": false,
   "clientProfiles": {
     "profiles": []
   },
