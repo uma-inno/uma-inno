@@ -76,6 +76,30 @@
       "clientRole" : false,
       "containerId" : "27d57df0-0794-4e96-92ac-85b802200864",
       "attributes" : { }
+    }, {
+      "id" : "b627b089-53d9-44f8-a4af-5e013848ac9a",
+      "name" : "Doctor",
+      "description" : "Healthcare provider who can access patient data with permission",
+      "composite" : false,
+      "clientRole" : false,
+      "containerId" : "27d57df0-0794-4e96-92ac-85b802200864",
+      "attributes" : { }
+    }, {
+      "id" : "1c35c95b-4c5c-4645-8eba-ef030193f04e",
+      "name" : "Patient",
+      "description" : "Standard patient user who can access their own health data",
+      "composite" : false,
+      "clientRole" : false,
+      "containerId" : "27d57df0-0794-4e96-92ac-85b802200864",
+      "attributes" : { }
+    }, {
+      "id" : "9db8f464-eccb-4967-be8d-7e7d934a661e",
+      "name" : "Administrator",
+      "description" : "System administrator with full access to all resources",
+      "composite" : false,
+      "clientRole" : false,
+      "containerId" : "27d57df0-0794-4e96-92ac-85b802200864",
+      "attributes" : { }
     } ],
     "client" : {
       "realm-management" : [ {
@@ -130,7 +154,7 @@
         "composite" : true,
         "composites" : {
           "client" : {
-            "realm-management" : [ "view-authorization", "view-users", "manage-realm", "manage-users", "query-users", "manage-events", "manage-identity-providers", "view-events", "view-clients", "create-client", "impersonation", "query-groups", "query-clients", "view-realm", "manage-authorization", "view-identity-providers", "manage-clients", "query-realms" ]
+            "realm-management" : [ "view-authorization", "view-users", "manage-realm", "manage-users", "query-users", "manage-events", "manage-identity-providers", "view-clients", "view-events", "create-client", "impersonation", "query-groups", "query-clients", "view-realm", "manage-authorization", "view-identity-providers", "manage-clients", "query-realms" ]
           }
         },
         "clientRole" : true,
@@ -385,11 +409,103 @@
   "webAuthnPolicyPasswordlessAcceptableAaguids" : [ ],
   "webAuthnPolicyPasswordlessExtraOrigins" : [ ],
   "users" : [ {
+    "id" : "5441cea9-fcf2-419e-bc20-948c3c283c98",
+    "username" : "alice",
+    "firstName" : "Alice",
+    "lastName" : "Smith",
+    "email" : "alice@example.com",
+    "emailVerified" : true,
+    "enabled" : true,
+    "createdTimestamp" : 1765807580501,
+    "totp" : false,
+    "credentials" : [ {
+      "id" : "804dfc38-7c11-4b41-999a-fae62237f14d",
+      "type" : "password",
+      "userLabel" : "My password",
+      "createdDate" : 1765807601141,
+      "secretData" : "{\"value\":\"b5INtbt5Qgjhh7T8SR0ZfQH6nFOThiP3viwmgdoDXXg=\",\"salt\":\"ycdDyeK96VcqkSaxC5CZzw==\",\"additionalParameters\":{}}",
+      "credentialData" : "{\"hashIterations\":5,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"7168\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"1\"]}}"
+    } ],
+    "disableableCredentialTypes" : [ ],
+    "requiredActions" : [ ],
+    "realmRoles" : [ "default-roles-fhir-auth", "Patient" ],
+    "notBefore" : 0,
+    "groups" : [ ]
+  }, {
+    "id" : "97503f80-1f4f-4ae6-8b58-eb50a082acf9",
+    "username" : "dr.bob",
+    "firstName" : "Bob",
+    "lastName" : "Anderson",
+    "email" : "dr.bob@example.com",
+    "emailVerified" : true,
+    "enabled" : true,
+    "createdTimestamp" : 1765807650088,
+    "totp" : false,
+    "credentials" : [ {
+      "id" : "340a186b-45e7-40d1-b2df-743c99b3cefa",
+      "type" : "password",
+      "userLabel" : "My password",
+      "createdDate" : 1765807665110,
+      "secretData" : "{\"value\":\"kmhlKGtMogI2lmurV+BPfPynplJAaIxl7G+2EZMc2y4=\",\"salt\":\"32rXXfpG8X2Ik3Vl1JGQeg==\",\"additionalParameters\":{}}",
+      "credentialData" : "{\"hashIterations\":5,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"7168\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"1\"]}}"
+    } ],
+    "disableableCredentialTypes" : [ ],
+    "requiredActions" : [ ],
+    "realmRoles" : [ "default-roles-fhir-auth", "Doctor" ],
+    "notBefore" : 0,
+    "groups" : [ ]
+  }, {
+    "id" : "499edbce-5fcd-4a08-9ac0-113864a2afa3",
+    "username" : "dr.smith",
+    "firstName" : "John",
+    "lastName" : "Smith",
+    "email" : "dr.smith@example.com",
+    "emailVerified" : true,
+    "enabled" : true,
+    "createdTimestamp" : 1765892153207,
+    "totp" : false,
+    "credentials" : [ {
+      "id" : "5426ce34-2676-4c67-a300-bb0e072c4cd0",
+      "type" : "password",
+      "userLabel" : "My password",
+      "createdDate" : 1765892167157,
+      "secretData" : "{\"value\":\"l/DmP5l34AD+2HCs0ZPpQVbqUwzU8jq/s6A3G82SWIo=\",\"salt\":\"pgU1jXnCvYjeN3htVxkACg==\",\"additionalParameters\":{}}",
+      "credentialData" : "{\"hashIterations\":5,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"7168\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"1\"]}}"
+    } ],
+    "disableableCredentialTypes" : [ ],
+    "requiredActions" : [ ],
+    "realmRoles" : [ "default-roles-fhir-auth", "Doctor" ],
+    "notBefore" : 0,
+    "groups" : [ ]
+  }, {
+    "id" : "df11bc00-e0e6-4924-941d-3627fdd16992",
+    "username" : "jan",
+    "firstName" : "Jan",
+    "lastName" : "Meyer",
+    "email" : "jan@admin.com",
+    "emailVerified" : true,
+    "enabled" : true,
+    "createdTimestamp" : 1765807681777,
+    "totp" : false,
+    "credentials" : [ {
+      "id" : "ed0338e1-6eee-460b-a840-a69a26b7d586",
+      "type" : "password",
+      "userLabel" : "My password",
+      "createdDate" : 1765807695369,
+      "secretData" : "{\"value\":\"FWdq7VOR7X/nSPIh99xcVvjuSz9dXWtf52QVGuZHDLs=\",\"salt\":\"t/ja+V16ylYIj3h9sEH/2w==\",\"additionalParameters\":{}}",
+      "credentialData" : "{\"hashIterations\":5,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"7168\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"1\"]}}"
+    } ],
+    "disableableCredentialTypes" : [ ],
+    "requiredActions" : [ ],
+    "realmRoles" : [ "default-roles-fhir-auth", "Administrator" ],
+    "notBefore" : 0,
+    "groups" : [ ]
+  }, {
     "id" : "6c1d215e-d5cb-4117-af89-cd6988ce3138",
     "username" : "service-account-fhir-client",
     "emailVerified" : false,
-    "createdTimestamp" : 1734354372391,
     "enabled" : true,
+    "createdTimestamp" : 1734354372391,
     "totp" : false,
     "serviceAccountClientId" : "fhir-client",
     "credentials" : [ ],
@@ -399,6 +515,20 @@
     "clientRoles" : {
       "fhir-client" : [ "uma_protection" ]
     },
+    "notBefore" : 0,
+    "groups" : [ ]
+  }, {
+    "id" : "7fc0d4bd-40ca-483e-9530-6e1fe84bded3",
+    "username" : "system-placeholder",
+    "email" : "system@hospital.org",
+    "emailVerified" : true,
+    "enabled" : false,
+    "createdTimestamp" : 1765806988834,
+    "totp" : false,
+    "credentials" : [ ],
+    "disableableCredentialTypes" : [ ],
+    "requiredActions" : [ ],
+    "realmRoles" : [ "default-roles-fhir-auth" ],
     "notBefore" : 0,
     "groups" : [ ]
   } ],
@@ -505,7 +635,8 @@
     "protocol" : "openid-connect",
     "attributes" : {
       "realm_client" : "false",
-      "client.use.lightweight.access.token.enabled" : "true"
+      "client.use.lightweight.access.token.enabled" : "true",
+      "post.logout.redirect.uris" : "+"
     },
     "authenticationFlowBindingOverrides" : { },
     "fullScopeAllowed" : true,
@@ -533,7 +664,8 @@
     "frontchannelLogout" : false,
     "protocol" : "openid-connect",
     "attributes" : {
-      "realm_client" : "true"
+      "realm_client" : "true",
+      "post.logout.redirect.uris" : "+"
     },
     "authenticationFlowBindingOverrides" : { },
     "fullScopeAllowed" : false,
@@ -569,9 +701,10 @@
     "attributes" : {
       "realm_client" : "false",
       "oidc.ciba.grant.enabled" : "false",
-      "client.secret.creation.time" : "1734354372",
+      "client.secret.creation.time" : "1762203061",
       "backchannel.logout.session.required" : "true",
       "post.logout.redirect.uris" : "http://localhost:8080/",
+      "display.on.consent.screen" : "false",
       "oauth2.device.authorization.grant.enabled" : "false",
       "backchannel.logout.revoke.offline.tokens" : "false"
     },
@@ -586,8 +719,9 @@
       "consentRequired" : false,
       "config" : {
         "user.session.note" : "clientAddress",
-        "id.token.claim" : "true",
         "introspection.token.claim" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
         "access.token.claim" : "true",
         "claim.name" : "clientAddress",
         "jsonType.label" : "String"
@@ -600,8 +734,9 @@
       "consentRequired" : false,
       "config" : {
         "user.session.note" : "clientHost",
-        "id.token.claim" : "true",
         "introspection.token.claim" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
         "access.token.claim" : "true",
         "claim.name" : "clientHost",
         "jsonType.label" : "String"
@@ -614,8 +749,9 @@
       "consentRequired" : false,
       "config" : {
         "user.session.note" : "client_id",
-        "id.token.claim" : "true",
         "introspection.token.claim" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
         "access.token.claim" : "true",
         "claim.name" : "client_id",
         "jsonType.label" : "String"
@@ -635,15 +771,343 @@
       }, {
         "name" : "PatientResource",
         "type" : "http://localhost:8080/fhir/Patient/*",
-        "ownerManagedAccess" : true,
+        "ownerManagedAccess" : false,
         "displayName" : "PatientResource",
         "attributes" : { },
         "uris" : [ "http://localhost:8080/fhir/Patient/*" ],
+        "scopes" : [ {
+          "name" : "read"
+        }, {
+          "name" : "update"
+        }, {
+          "name" : "delete"
+        }, {
+          "name" : "create"
+        } ],
+        "icon_uri" : ""
+      }, {
+        "name" : "AllergyIntoleranceResource",
+        "type" : "http://localhost:8080/fhir/AllergyIntolerance/*",
+        "ownerManagedAccess" : false,
+        "displayName" : "AllergyIntoleranceResource",
+        "attributes" : { },
+        "uris" : [ "http://localhost:8080/fhir/AllergyIntolerance/*" ],
+        "scopes" : [ {
+          "name" : "read"
+        }, {
+          "name" : "update"
+        }, {
+          "name" : "delete"
+        }, {
+          "name" : "create"
+        } ],
+        "icon_uri" : ""
+      }, {
+        "name" : "MedicationStatementResource",
+        "type" : "http://localhost:8080/fhir/MedicationStatement/*",
+        "ownerManagedAccess" : false,
+        "displayName" : "MedicationStatementResource",
+        "attributes" : { },
+        "uris" : [ "http://localhost:8080/fhir/MedicationStatement/*" ],
+        "scopes" : [ {
+          "name" : "read"
+        }, {
+          "name" : "update"
+        }, {
+          "name" : "delete"
+        }, {
+          "name" : "create"
+        } ],
+        "icon_uri" : ""
+      }, {
+        "name" : "ConditionResource",
+        "type" : "http://localhost:8080/fhir/Condition/*",
+        "ownerManagedAccess" : false,
+        "displayName" : "ConditionResource",
+        "attributes" : { },
+        "uris" : [ "http://localhost:8080/fhir/Condition/*" ],
+        "scopes" : [ {
+          "name" : "read"
+        }, {
+          "name" : "update"
+        }, {
+          "name" : "delete"
+        }, {
+          "name" : "create"
+        } ],
         "icon_uri" : ""
       } ],
-      "policies" : [ ],
-      "scopes" : [ ],
-      "decisionStrategy" : "UNANIMOUS"
+      "policies" : [ {
+        "name" : "Allow fhir-client Policy",
+        "type" : "client",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "clients" : "[\"fhir-client\"]"
+        }
+      }, {
+        "name" : "Patient Access Policy",
+        "description" : "Policy for users with Patient role",
+        "type" : "role",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "fetchRoles" : "false",
+          "roles" : "[{\"id\":\"Patient\",\"required\":true}]"
+        }
+      }, {
+        "name" : "Doctor Access Policy",
+        "description" : "Policy for users with Doctor role",
+        "type" : "role",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "fetchRoles" : "false",
+          "roles" : "[{\"id\":\"Doctor\",\"required\":true}]"
+        }
+      }, {
+        "name" : "Administrator Access Policy",
+        "description" : "Policy for administrators with full access",
+        "type" : "role",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "fetchRoles" : "false",
+          "roles" : "[{\"id\":\"Administrator\",\"required\":true}]"
+        }
+      }, {
+        "name" : "Patient or Admin Access",
+        "description" : "Allows patients to access their own data or admins to access all",
+        "type" : "aggregate",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "applyPolicies" : "[\"Administrator Access Policy\",\"Patient Access Policy\"]"
+        }
+      }, {
+        "name" : "Doctor or Admin Access",
+        "description" : "Allows doctors and admins to access patient data",
+        "type" : "aggregate",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "applyPolicies" : "[\"Doctor Access Policy\",\"Administrator Access Policy\"]"
+        }
+      }, {
+        "name" : "Resource Owner Policy",
+        "description" : "Grans access to resource owners",
+        "type" : "script-owner-policy.js",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : { }
+      }, {
+        "name" : "Dr. Bob User Policy",
+        "description" : "",
+        "type" : "user",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "users" : "[\"dr.bob\"]"
+        }
+      }, {
+        "name" : "Dr Smith User Policy",
+        "description" : "",
+        "type" : "user",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "users" : "[\"dr.smith\"]"
+        }
+      }, {
+        "name" : "Patient Read Own Data",
+        "description" : "Patients can read their own Patient resource",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "defaultResourceType" : "",
+          "resources" : "[\"PatientResource\"]",
+          "scopes" : "[\"read\"]",
+          "applyPolicies" : "[\"Patient or Admin Access\"]"
+        }
+      }, {
+        "name" : "Patient Write Own Data",
+        "description" : "Patients can update their own Patient resource",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "resources" : "[\"PatientResource\"]",
+          "scopes" : "[\"update\"]",
+          "applyPolicies" : "[\"Patient or Admin Access\"]"
+        }
+      }, {
+        "name" : "Doctor Read Patient Data",
+        "description" : "Doctors can read Patient resources with permission",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "resources" : "[\"PatientResource\"]",
+          "scopes" : "[\"read\"]",
+          "applyPolicies" : "[\"Doctor or Admin Access\"]"
+        }
+      }, {
+        "name" : "Admin Full Patient Access",
+        "description" : "Admins have full access to Patient resources",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "resources" : "[\"PatientResource\"]",
+          "scopes" : "[\"update\",\"read\",\"create\",\"delete\"]",
+          "applyPolicies" : "[\"Administrator Access Policy\"]"
+        }
+      }, {
+        "name" : "Patient Read Own Allergies",
+        "description" : "Patients can read their own allergy information",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "resources" : "[\"AllergyIntoleranceResource\"]",
+          "scopes" : "[\"read\"]",
+          "applyPolicies" : "[\"Patient or Admin Access\"]"
+        }
+      }, {
+        "name" : "Doctor Manage Allergies",
+        "description" : "Doctors can read/create/update allergy records",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "resources" : "[\"AllergyIntoleranceResource\"]",
+          "scopes" : "[\"update\",\"read\",\"create\"]",
+          "applyPolicies" : "[\"Doctor or Admin Access\"]"
+        }
+      }, {
+        "name" : "Admin Full Allergy Access",
+        "description" : "Admins have full access to allergy records",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "resources" : "[\"AllergyIntoleranceResource\"]",
+          "scopes" : "[\"update\",\"read\",\"create\",\"delete\"]",
+          "applyPolicies" : "[\"Administrator Access Policy\"]"
+        }
+      }, {
+        "name" : "Patient Read Own Conditions",
+        "description" : "Patients can read their own medical conditions",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "resources" : "[\"ConditionResource\"]",
+          "scopes" : "[\"read\"]",
+          "applyPolicies" : "[\"Patient or Admin Access\"]"
+        }
+      }, {
+        "name" : "Doctor Manage Conditions",
+        "description" : "Doctors can read/create/update Conditions",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "resources" : "[\"ConditionResource\"]",
+          "scopes" : "[\"update\",\"read\",\"create\"]",
+          "applyPolicies" : "[\"Doctor or Admin Access\"]"
+        }
+      }, {
+        "name" : "Admin Full Condition Access",
+        "description" : "Admins have full access to Conditions",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "resources" : "[\"ConditionResource\"]",
+          "scopes" : "[\"update\",\"read\",\"create\",\"delete\"]",
+          "applyPolicies" : "[\"Administrator Access Policy\"]"
+        }
+      }, {
+        "name" : "Patient Read Own Medications",
+        "description" : "Patients can read their own medication records",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "resources" : "[\"MedicationStatementResource\"]",
+          "scopes" : "[\"read\"]",
+          "applyPolicies" : "[\"Patient or Admin Access\"]"
+        }
+      }, {
+        "name" : "Doctor Manage Medications",
+        "description" : "Doctors can read/create/update medication statements",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "resources" : "[\"MedicationStatementResource\"]",
+          "scopes" : "[\"update\",\"read\",\"create\"]",
+          "applyPolicies" : "[\"Doctor or Admin Access\"]"
+        }
+      }, {
+        "name" : "Admin Full Medication Access",
+        "description" : "Admins have full access to medication records",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "UNANIMOUS",
+        "config" : {
+          "resources" : "[\"MedicationStatementResource\"]",
+          "scopes" : "[\"update\",\"read\",\"create\",\"delete\"]",
+          "applyPolicies" : "[\"Administrator Access Policy\"]"
+        }
+      }, {
+        "name" : "Patient Owner Access Permission",
+        "description" : "Resource owners can access their resources",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "defaultResourceType" : "Patient",
+          "applyPolicies" : "[\"Resource Owner Policy\"]",
+          "scopes" : "[\"write\",\"read\",\"delete\"]"
+        }
+      }, {
+        "name" : "Condition Owner Access Permission",
+        "description" : "Resource owners can access their resources",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "defaultResourceType" : "Condition",
+          "applyPolicies" : "[\"Resource Owner Policy\"]",
+          "scopes" : "[\"write\",\"read\",\"delete\"]"
+        }
+      }, {
+        "name" : "MediactionStatement Owner Access Permission",
+        "description" : "Resource owners can access their resources",
+        "type" : "scope",
+        "logic" : "POSITIVE",
+        "decisionStrategy" : "AFFIRMATIVE",
+        "config" : {
+          "defaultResourceType" : "MediactionStatement",
+          "applyPolicies" : "[\"Resource Owner Policy\"]",
+          "scopes" : "[\"write\",\"read\",\"delete\"]"
+        }
+      } ],
+      "scopes" : [ {
+        "name" : "read"
+      }, {
+        "name" : "create"
+      }, {
+        "name" : "update"
+      }, {
+        "name" : "delete"
+      }, {
+        "name" : "write"
+      } ],
+      "decisionStrategy" : "AFFIRMATIVE"
     }
   }, {
     "id" : "c1926955-f77b-4a15-8be9-fbab2b1f504f",
@@ -666,7 +1130,8 @@
     "frontchannelLogout" : false,
     "protocol" : "openid-connect",
     "attributes" : {
-      "realm_client" : "true"
+      "realm_client" : "true",
+      "post.logout.redirect.uris" : "+"
     },
     "authenticationFlowBindingOverrides" : { },
     "fullScopeAllowed" : false,
@@ -845,6 +1310,58 @@
       }
     } ]
   }, {
+    "id" : "9737a927-f817-4a2b-849f-e86ee0537138",
+    "name" : "service_account",
+    "description" : "Specific scope for a client enabled for service accounts",
+    "protocol" : "openid-connect",
+    "attributes" : {
+      "include.in.token.scope" : "false",
+      "display.on.consent.screen" : "false"
+    },
+    "protocolMappers" : [ {
+      "id" : "58a22041-39ec-49fd-80d6-9724f6fa7e9f",
+      "name" : "Client IP Address",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-usersessionmodel-note-mapper",
+      "consentRequired" : false,
+      "config" : {
+        "user.session.note" : "clientAddress",
+        "id.token.claim" : "true",
+        "introspection.token.claim" : "true",
+        "access.token.claim" : "true",
+        "claim.name" : "clientAddress",
+        "jsonType.label" : "String"
+      }
+    }, {
+      "id" : "47af43ea-4a08-40f5-8ec1-3fc940e8ab69",
+      "name" : "Client ID",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-usersessionmodel-note-mapper",
+      "consentRequired" : false,
+      "config" : {
+        "user.session.note" : "client_id",
+        "id.token.claim" : "true",
+        "introspection.token.claim" : "true",
+        "access.token.claim" : "true",
+        "claim.name" : "client_id",
+        "jsonType.label" : "String"
+      }
+    }, {
+      "id" : "9222a270-418e-40cb-b879-a2c509117786",
+      "name" : "Client Host",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-usersessionmodel-note-mapper",
+      "consentRequired" : false,
+      "config" : {
+        "user.session.note" : "clientHost",
+        "id.token.claim" : "true",
+        "introspection.token.claim" : "true",
+        "access.token.claim" : "true",
+        "claim.name" : "clientHost",
+        "jsonType.label" : "String"
+      }
+    } ]
+  }, {
     "id" : "54b31ac9-dea0-43d0-aa3a-1f691b495492",
     "name" : "organization",
     "description" : "Additional claims about the organization a subject belongs to",
@@ -861,12 +1378,13 @@
       "protocolMapper" : "oidc-organization-membership-mapper",
       "consentRequired" : false,
       "config" : {
-        "id.token.claim" : "true",
         "introspection.token.claim" : "true",
+        "multivalued" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
         "access.token.claim" : "true",
         "claim.name" : "organization",
-        "jsonType.label" : "String",
-        "multivalued" : "true"
+        "jsonType.label" : "String"
       }
     } ]
   }, {
@@ -961,8 +1479,9 @@
       "consentRequired" : false,
       "config" : {
         "user.session.note" : "AUTH_TIME",
-        "id.token.claim" : "true",
         "introspection.token.claim" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
         "access.token.claim" : "true",
         "claim.name" : "auth_time",
         "jsonType.label" : "long"
@@ -1001,6 +1520,7 @@
       "config" : {
         "introspection.token.claim" : "true",
         "multivalued" : "true",
+        "userinfo.token.claim" : "true",
         "user.attribute" : "foo",
         "id.token.claim" : "true",
         "access.token.claim" : "true",
@@ -1026,7 +1546,8 @@
       "config" : {
         "id.token.claim" : "true",
         "introspection.token.claim" : "true",
-        "access.token.claim" : "true"
+        "access.token.claim" : "true",
+        "userinfo.token.claim" : "true"
       }
     } ]
   }, {
@@ -1336,7 +1857,7 @@
       "subType" : "anonymous",
       "subComponents" : { },
       "config" : {
-        "allowed-protocol-mapper-types" : [ "oidc-usermodel-attribute-mapper", "oidc-full-name-mapper", "oidc-usermodel-property-mapper", "saml-user-property-mapper", "oidc-sha256-pairwise-sub-mapper", "saml-role-list-mapper", "oidc-address-mapper", "saml-user-attribute-mapper" ]
+        "allowed-protocol-mapper-types" : [ "oidc-sha256-pairwise-sub-mapper", "oidc-full-name-mapper", "oidc-usermodel-property-mapper", "oidc-address-mapper", "saml-role-list-mapper", "oidc-usermodel-attribute-mapper", "saml-user-attribute-mapper", "saml-user-property-mapper" ]
       }
     }, {
       "id" : "5907d8ba-9a9c-4510-8335-838527a4003e",
@@ -1361,7 +1882,7 @@
       "subType" : "authenticated",
       "subComponents" : { },
       "config" : {
-        "allowed-protocol-mapper-types" : [ "saml-role-list-mapper", "saml-user-property-mapper", "saml-user-attribute-mapper", "oidc-usermodel-attribute-mapper", "oidc-usermodel-property-mapper", "oidc-full-name-mapper", "oidc-sha256-pairwise-sub-mapper", "oidc-address-mapper" ]
+        "allowed-protocol-mapper-types" : [ "oidc-usermodel-property-mapper", "saml-role-list-mapper", "oidc-address-mapper", "oidc-full-name-mapper", "saml-user-attribute-mapper", "oidc-sha256-pairwise-sub-mapper", "oidc-usermodel-attribute-mapper", "saml-user-property-mapper" ]
       }
     }, {
       "id" : "719f531f-6d4d-435e-8a6c-5dfffd7557c5",
@@ -1386,8 +1907,8 @@
       "providerId" : "hmac-generated",
       "subComponents" : { },
       "config" : {
-        "kid" : [ "44a99ca5-1ed3-46cb-b728-4786706b71b6" ],
-        "secret" : [ "lZig7CYrMk8tlcHuSNrJ2poEppeTkiJ19xoEgBUcwaOsQbbhApFrS57SgUjJS-g0aTqcWwsh0TLDleLjmnCcc6_J4DuT8xbL5UDr7owTl9B5hhvWw3WoLL_5r_sAqgB0WSCtzHo0voCrWiZK7GZPv7AYT6RHjOguKgULSWBvmd0" ],
+        "kid" : [ "02bda723-e109-41de-a6cd-aac57bfc42c2" ],
+        "secret" : [ "ba_CuX5IDuaXlk-vZ5jlctVV5Shsxc_L8ykdmcDy4eQcTUly4t3FGokm3xPVcpup36wkKCmAYIyZmraBp-6YBtQ0lsAwEvmVPlgkfApPXMaReH9SxX2hfMSwj0-EJgaEtU3OuS0_Gkwojjg938YMmLxbPb5fjqbjM1MAyg-75mQ" ],
         "priority" : [ "100" ],
         "algorithm" : [ "HS512" ]
       }
@@ -1397,8 +1918,8 @@
       "providerId" : "aes-generated",
       "subComponents" : { },
       "config" : {
-        "kid" : [ "8ad5b2e9-b7a3-45d1-b1cd-372260c513df" ],
-        "secret" : [ "AAVB8dxFrsF-qQGgY4b22Q" ],
+        "kid" : [ "f208dad8-d288-4beb-aa05-e1b0ee037a02" ],
+        "secret" : [ "6AC2sLXwzIkVLdgTstKBpA" ],
         "priority" : [ "100" ]
       }
     }, {
@@ -1407,9 +1928,8 @@
       "providerId" : "rsa-enc-generated",
       "subComponents" : { },
       "config" : {
-        "privateKey" : [ "MIIEowIBAAKCAQEAkrj+7/0IW0TAHd7o1nOiLNcrG+mQzbI5FkrVEUfYp8D0GsSxxrfUPUDwTc7Ck5VVtC/VHPC15S3npY7hvH99RtaKDiMqQ7nb2V8tu4nqrf4Z4nzi5FZX1W3N3fjsWJ5aScrWquKy04BgjzBaG5tFS27h7YEwQhdkXHqsVzRXJGv7VmWoy/rMLWcPxP9FDBsjvloRR0yEIrx9xoDHbBI6mDc08Ox8306IqlioqcJTZ5SlMrOU6lg59n8BG2iQyNOI3hYNM/MuiC4U9tbZkOn5kn75kWjjgHYwjy94nq9YgLvwHgxvLzpUKBcMFqsVt8KX7wmnVpqgcHWxNAavc332kwIDAQABAoIBAAIRkaaYjrGauoqxRd8gKj0vm2/9TwlXZe6mh3KC7M8QrWBjPY5rsRZcAAdYzu19wYOU2RBbZHUivI1dAlnCAmYpSDEC1em2iR77dI2cWC6z0nGbCSfm/74Gmkxy4gIt2WAI+BXYtGS+/p2GNP8GpWd23MCYfbGw2r1jDWL9Xe0pgx2oBHh7mtNBLqyPZsbDKLQjuyLNf/7jl1l7QIj8FE/SVbltXG8uhBjUHe1+dmHbW9WGXAq3/rrqUK9P3GnGbRvVvN2SpdW9aa9LB5sZ4Dcj1ZqlYwuEC3uxQW3A5cJQ18V6iOs3NDSqifE6NnKLsKFpDNYMbPmKwItSAbXyvOECgYEAySA9Z4iKaqMkS0/C9I0mG2lFFt8ZhW2JNLopoOatnF9tsTUFbD8psw68fK0P6NVo6HDsTxw19bVy17w6R5B2jtdFCG8RNBM6CzfFJpOC67V/B3efOwpBSLTRLx5A+rc40qJojMAzMN/1S7VLSukxTeKHh/2W66jzDbGjEXYR8h0CgYEAusDs7gIIZkn7ToDZ3b/OZIJmFE1s9KBCLidTRGCmwJqvmNsvsSr2fSGlYdgEdZCUjNvEn0XP20ZMjKlH2fHCImeNOQvxqFc9VyBlHwFsyN8z033Ouw0tbOmtxMoJpyXh2CE8J8RTxAKpVynrhMdTdPb8g1ZyzJ15MeVsMoEtLG8CgYAEpj0lJo/klS7ims5r7tNhsNZLCA9D+VtBn8gUkyCSS9ZyUUJ11SP2orGSxEFo5X4OWYXs8j8BFhe4iv5h5yIGfU14O3EPXh5qYfipwqE1J7XvC0HgEIWf06Y+S5m+8ftbSyvVjR/h0luOS3uZGLjuDv2JFECn4/jyaRfW8H7LtQKBgChOtZSVSbzSIPSLqPpMiL52ypN9NpQB9ubBRB6RAcy2VkoWnM+PZ04QsgJRPn0lbHqOgHyj873vCVyeuMxYer80PG3gnxLnaWzhqBGuHA2q5yOxlqoWqQRF12SO+tBhw8IDQlmO7Ul0DZqriJLK9r9bA5tRUEvLfToAu36XFOnvAoGBAI+KZraZkeWLRm0s2SJfs/9BGwgJwNMAS3/luYCDJNacN2MxJpkZSBndwe+caKoyfgbJplHB0DBAVyaxqpMiiaGmuj+v7H/xCjLXksSkyTQcvnQ1GvrZh45u90+jefxxZlI8Zsm5IGlblfnQOhZvUIG6dtjTHL7rFuEUCMIhUrBo" ],
-        "keyUse" : [ "ENC" ],
-        "certificate" : [ "MIICoTCCAYkCBgGTz469DTANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAlGSElSLUF1dGgwHhcNMjQxMjE2MTI1OTE4WhcNMzQxMjE2MTMwMDU4WjAUMRIwEAYDVQQDDAlGSElSLUF1dGgwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCSuP7v/QhbRMAd3ujWc6Is1ysb6ZDNsjkWStURR9inwPQaxLHGt9Q9QPBNzsKTlVW0L9Uc8LXlLeeljuG8f31G1ooOIypDudvZXy27ieqt/hnifOLkVlfVbc3d+OxYnlpJytaq4rLTgGCPMFobm0VLbuHtgTBCF2RceqxXNFcka/tWZajL+swtZw/E/0UMGyO+WhFHTIQivH3GgMdsEjqYNzTw7HzfToiqWKipwlNnlKUys5TqWDn2fwEbaJDI04jeFg0z8y6ILhT21tmQ6fmSfvmRaOOAdjCPL3ier1iAu/AeDG8vOlQoFwwWqxW3wpfvCadWmqBwdbE0Bq9zffaTAgMBAAEwDQYJKoZIhvcNAQELBQADggEBABGoALXaGzfEJKzCFi4t+DWBZRIWxUMF87oW/BHFC9+XPanBFz8z+MXzTIAp1jQ2lxT70mLqs1OOUB+hyHqycu52m442p/OGw49TfiCVC7TEp9XzkYo16Kul6qHthmFgvv75pznLnBz9AyQX3dBsLTKeMNiCoquj2bdS+IkyZ/mLeaF5DrourV/B88KCbj20GrMpeQAIR3men1LMUKnmVe6dp/hmtsUotASqMLiaSMbNW6Pw2ZdvhayRlZC9OYqd2hK7HRZp21e6BKYjcT5nUvsgyn1dxnsrXr7nJlfQnFx/D8g9/RZEC9mvDryflJh5etzvDRCcLYYQPdV6V6Y9UHY=" ],
+        "privateKey" : [ "MIIEpQIBAAKCAQEA909eyfE55ZnjTUrmJtqki9iv4uJFEnGq9Ib35+HoqKfjzrHQ6MKd+2dEajxL5TkiFgh4H/LzhtpjRTy76BnP8tKCO9jBOXZfqY8w7/bBIkH79rL16v/MwW71gpj0rlQ8ZdereUB09A7kmfIzdurSTtkGmW6wbPukDS3/wObl7lHlEBu5caeChFAJ1vSx2AzFkVFwMnBlksBLCY+jVGoO8LGaBjBGfsch41L9wddEV8wrCF301H0VOvJtX1j3BnuuQZ5AX/8baMj9/awkRrvrxSV/WfqFSl/EXhBd59MwsiHW48UavhV0dplVZ3x8L4Uxoso73s2ZuL7suNAdvfypFwIDAQABAoIBABHEcFaTxQlmGpAVVHRFev2CY3MqYbSnLpVYvlC4yIKYD+QWnvVJ822ksqPrPGH1zn7EvFSXRhWnH5X8J10lFZfStdaKMP+ULd/m+1NnZ+Kyg4vquYODkyNGec7tzDkGBjzO13E48e4Nb9umLI+w48u/CHFXeXIAS33tkxU5wW/IlZiwVec/QvaCkFiWQMjb0XyxW2EHI1qvZInx/hDkg61pB6xlZcWXXiS97fgSpNkPe/ISHcU7i9P1uNwE3H5yP7k7vbM/8nWGgIQyJdDjfN98u9y9CJLrnAF0wi0AgF4cCE3yXUIbLbSHLWjTSmrta6dQZEn1UmJK6OX/U1kkABECgYEA/kPaxXn1jUnmrKM9/h5TDboohrhnPWwQMtq7TGUirtnYyd0IrBxnoeBl+5Dm4ldbKrOQzcYoA49MgewoIWQJopAbz5Uuzq9eeC2tzIVDclAV/ZnJ5i7QjBAlAFcVh072cOyv1kg4y8sEkBJbUj7S2EsFeHACSTOWmSlA9wnnlQkCgYEA+P9d5qIIXHlq94Ap98ryViScl8odgd+/IAfC/pGehTFlbo79LxwLdLI3VQ2w4YmaZVwjYGYuAjzYUGC82ZZDGHZvxs8Jn4+f4I6e63tL5xJqXG0UVM1c7h6loGtZx2dQ9vm/Rsp6DpjLBN/wSeF7PSgQZdu0JtaJNNPkZ8LQ9R8CgYEAtmWsuX68pIc//9X2saXFRJKnYcVE4i30DNcWBz6Bu9awilaSUwzpVpln7yfKSNILpz07AjJFIBCa/JSRUSq3MrOYD7hf5IqvBR0XkSCD+qvyqoK47/PjTKaENJND8VW2udlAZkJW4/KWKlfQxNYmYFyo5vXK3gIw5VxPqyeixikCgYEAiOys73H1FR0zxEy3R2tT3ikd756WoV+wE2YRRbpAKNBkDesVsX1Dk3WZVe1EcpIf1FNZpN4ruNFKxtCbqS+nT+F5UCN0EEmDypHDNI1FzRjkYlUdlBCmZM93lwLRiQT4kgf+tmgLvNEq+1BGK+qRwayxb8HkjGL3apSHCsQn8lMCgYEAlzWUwFOmiPgq271wBeDOy+YN6JAUG9HK2s0V8KO+2iwKQ/gUHIhCMWoT4KP5bz8YCKTS1HBNJypUeQmi6uCSS+j7vvU9QnH1KUef3r+D36sTn80+WSvkuBl66MkvCqB9ubIHpST3qWhEWJIJSZSEKu6I24EZm0NUgYnzdCoXwh4=" ],
+        "certificate" : [ "MIICoTCCAYkCBgGbIipyvzANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAlGSElSLUF1dGgwHhcNMjUxMjE1MTMxNzQ1WhcNMzUxMjE1MTMxOTI1WjAUMRIwEAYDVQQDDAlGSElSLUF1dGgwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQD3T17J8TnlmeNNSuYm2qSL2K/i4kUScar0hvfn4eiop+POsdDowp37Z0RqPEvlOSIWCHgf8vOG2mNFPLvoGc/y0oI72ME5dl+pjzDv9sEiQfv2svXq/8zBbvWCmPSuVDxl16t5QHT0DuSZ8jN26tJO2QaZbrBs+6QNLf/A5uXuUeUQG7lxp4KEUAnW9LHYDMWRUXAycGWSwEsJj6NUag7wsZoGMEZ+xyHjUv3B10RXzCsIXfTUfRU68m1fWPcGe65BnkBf/xtoyP39rCRGu+vFJX9Z+oVKX8ReEF3n0zCyIdbjxRq+FXR2mVVnfHwvhTGiyjvezZm4vuy40B29/KkXAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAA63YzfS5gY83kEV8V4etEd4JND6Am4WETH9bBVYqwPL36w5PpUlt4EQKyMuQ3mimwgnDoRkLombd5wop+wELTy8MaVUWl2FBnmZag6fYKBibSygL/SqY85b2ziTym5y5dnRVFRS5xOyP6ywRfH3KVQCamcA5fIorjUedDlPz6Rys1yA3wh0YFncsESQ5ZbcDtkHoVSdq9opb+CIOrwKcVbnl0IDhOvDf+OO78zxu6fBYKfTzwzfbFvFy70F0a4Tt1AKXfjMebUgjil9oBshp9CDb3GtheoJKQS2Qb/7ZYazsXCYqK91Yn5VEZinzFhJntsaVh7jPnhf2inwhmsUdvc=" ],
         "priority" : [ "100" ],
         "algorithm" : [ "RSA-OAEP" ]
       }
@@ -1419,15 +1939,13 @@
       "providerId" : "rsa-generated",
       "subComponents" : { },
       "config" : {
-        "privateKey" : [ "MIIEogIBAAKCAQEAxN22Dwvby9SH7lUSb/20HVHSvnuQ3RSOOBdMUlek0YtksJOiYWG6LafYxZ4/4fPuKTXuY0rwxFTjJ62One7CHYl8VAerrqHVw2PjUS27DsacPsH2xclxRnW4gXJ2H4OmjWa+f4CbH7BeCJ8g5bCGy1irGk2eR0jMLgfEjdf4xDznizIhmkNzDb3dduMgiNv8ce2l4tvy4GzYs1kXnBr0tAQRjiBwYyuoNwtCTC6CwkxRtPjRNg7lnO9F/hP4qvVTxbLYbkqdRaNkVKrZq9VrFscAXRgnrxygCgbCSgZKlDLka5VHcbnm/WFfjYSZHZiAfzn0r0YfI9t54V3hid6r3QIDAQABAoIBACgQrjdwNKaORa7P0f2ITtKDv0XkfHY983a/aRk9/I1n1tFn7m1ut/cIOKH5Y6tu2zq4XuCG1SrD0uoVlJeYSpm7zBmG6R4Ukh5ekxoHmlD2w0Azde9JYLwUA72Wh6tAvhH7hcwJpqhjmrOa/RU54Kj8TfA/uTVtP56jlpE+kcKP/bNRI+GR4jxgfoK1OKB7O1GpyZRs5kTNSyvGsnYbhzUUBh2fmaCVBpcUm6uLSu+24yD55txvZHELWsIZsHEHu8OlEb+UaDEKFp1ksecnmiXHc+a/EXHMuw+ZlD8cgp1Feb3XMwHg4OlC6brzu4PamA8lgLcR+eIsv5uhOMdbpzkCgYEA+bZGvyH3P+P0tVFli68DIMA+vSNVFe0cUQi0rRqiNEAdtwKyEXJJWwSxkUp25/NveFL4uJNLFrpQkK/6Ys1Dw1z+rExF4Fygnawk3Eu12x+hWSUDxy6ebhnJ7F+seYCRbKo/1fqMBIyFy9h3n20Q/5s8GRtcZ8lv2Yyd0/ZJOOkCgYEAydLF2QF9HSDzyIPaBW1pGPForMrwFW29cd21n5WwBf56cEJqFMEIA4UUq8wpsS2YpwCLSDSgfA+jRAUwaSBOfFR6FbslrvPg8IAzgkyUStPQgH8yinirDaRGr1UicYorP8VYq7FZBrqB0W1OOYpU9WzLClizolywAgAPwGgsgtUCgYBF96/NADxiF4JKh7sXL3uF4rfxkQPXN+/WOMU/N5Y5Y7mvvL6eKtKpASCr4Bx/E3OpWD4+oW7JuHy4fcZ/hpo1FEp7hoeRvQJ4C3Lskv4qnqs76iYr2kEkAm/Unl4aUU7uDqoCT8iJwcH/gvDJp+q6ZAmr00HKBuQjJcZXTMvpeQKBgEvJjGYa+wKPNzxa1uom1cp6DNamNlW1qegyW1ub+Een8g5pwjAc9Idt1/9TYWyZNLOxrpvkt0cfEC4gzLcNXKuvhVDXwCTci+GEItORMjaPJ8K5AR+ihIlQ4QJCM/by7Z662rtOk6HFM66TH0bYPWMUAYLXIE2eBLIbl86mz+ApAoGARx24d+r6qe/IlZuKuo1i2u3t6uFg5uKUsvcvcaaut9JmEEnHkUBGsY+O4s4eonpLjbu4trC0MNhrCKLorWoUcRlnEGRg/Ta9cxauShLs2/sVWeUNgj+pGWUsVJlt2KiF+70fIyyD2yQX0wjN2ZqVQFXW0b3lQWFBbl9etCPJGUI=" ],
-        "keyUse" : [ "SIG" ],
-        "certificate" : [ "MIICoTCCAYkCBgGTz468rDANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAlGSElSLUF1dGgwHhcNMjQxMjE2MTI1OTE4WhcNMzQxMjE2MTMwMDU4WjAUMRIwEAYDVQQDDAlGSElSLUF1dGgwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDE3bYPC9vL1IfuVRJv/bQdUdK+e5DdFI44F0xSV6TRi2Swk6JhYbotp9jFnj/h8+4pNe5jSvDEVOMnrY6d7sIdiXxUB6uuodXDY+NRLbsOxpw+wfbFyXFGdbiBcnYfg6aNZr5/gJsfsF4InyDlsIbLWKsaTZ5HSMwuB8SN1/jEPOeLMiGaQ3MNvd124yCI2/xx7aXi2/LgbNizWRecGvS0BBGOIHBjK6g3C0JMLoLCTFG0+NE2DuWc70X+E/iq9VPFsthuSp1Fo2RUqtmr1WsWxwBdGCevHKAKBsJKBkqUMuRrlUdxueb9YV+NhJkdmIB/OfSvRh8j23nhXeGJ3qvdAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAE27rL3V0Hc+B/h/gUDnI8gvht2B57za5eBxjkrgF1CCIHGWLqUbfSmecOCNPLseu9k3ORKVltHIVX4/JWqCKCr1U8fMnKtn+fpISpJ/XaA9hS9w63HzlksCgASfLMpkS0PJbvLwLARwM8D7XcY7oiRXAcEtFFUW11zSIh8QZnL2vxOdLyf2ErJsUswYYSnglMeuS+/cJ4EAYxWBG/jRXRYywSl9k9D8UigYOC8Vcir1d3dDXM7KpFTOqcDF7QZ0aLSeuNE5zwDtfr3kqxJbwUiQlWR6CK7cf/UR8yLig4Y3IhQzEYBjnyqRQolovhS6TvNuBs4ctBOm/YYcPw3tSYo=" ],
+        "privateKey" : [ "MIIEowIBAAKCAQEAg4v5s2w7idCpRqfTb9nkY17DzYRR1xVmYP7MvkPJMBJL5b3LEtTrwgZ+IjXgrzkDGApXDdJy4LMwpKD9ZxKqffccCij0Ap4qHUPW1GcQcOn6NNPt6dVciKP2na3AVfvySoVakxdEOq4FWKjNl+UKs2f5BMvcman5n6RnMkzSocl1YvG6LDCI0sEcCHJixj8Wr7Zach7BjLXw9aZe0HuOj8yY3uihyQdm8eo2lRqc1I2AhDZnosvWGuB6KJJMQgYFuZvLtk0tiQeaXidtWLW2GAoYHmXGdQ2YJUPSyacH1RNcL8EMlJAtEx+qSDSr0f8ggOERJbSnp05uJ5CoXSwffwIDAQABAoIBAA6m0w+QcQs3EfucKrktEDqfLfjgkYr+x7Hq/1v7yddQWmLC4nD9BStNtNPTo2xw0a7mS+7urzvmyXa0tbS6yAGSue1JxW/bNP6gdTegKR0iemtS5Y9jY9SWSpwiY6dQEhsJwl5au487nb3Tw151NN1pqbtGh5IX9AU7dwELvHQnhsmv+DVGg6IYC5iZMMT2WJn1duzSXHixgf4wxlG7O+ownszNC4yJgWmtAiNzM8vLGczpiz++MnBdnvEDQbvvQ5xP7tjXPPU+HTYjccHNkjwRleu2HdoDxEDgGpqNmBoaBOckBI/Lp5jkRItnaKm/EYkDD2W5d4YRDnqQo8tPHeECgYEAuO19ljlu3Eghn0nrHQhcZ5ma3UYzQ9msZpzrpTvxX5LH4H3+eOnMMEfgumkvlE9l7S//+/BlaBqyHgtTGCjOg27pF/khPp3VfcOoiCnaXCRf9+aHlXhN9Kb7dszBbOWPWL3Is//amRc3Dc9CGuzijamGLPacKwNGeIF9MDnbGl8CgYEAthp8/96HxnAD9W+J6Eo8Mz2GViUooHhhxbJ3Z+9an045TzQm8VoVLk+cCQkHNEDyAF0pPvQx7BQQbv7H5rU2VR4oD69ru/qbXHDy4NxS0a3PRCxLERXxYJcwIEYwKRavhMxwMZau5pwDEw8EfCCnZFEeK1U0dvnCUyA9yYoPTuECgYBm59lL4DfdotH65tJLvJxXFjYETg03A4kZLNdAgoPF0FMjjFkwBcIXV9gpQ2EzoZ8xhtVm6BY2ASz+5QRfXE3W+8AAFCU4x/HGYzuEUe3t+lvhAkqOlXyj2Mv0BurX40KKekmWSJjnOfDr4VqCyzEi7aP5n1213cO4SS5VyMww9wKBgQCPiqObYQKvdZ55ObmAA/wd+9JHVzUGAL45AqtCnxZU2mksOJS1zGdDwPbi3F30X3kitkyL1hr/1vT5ORXDknXIdGPpsUH/w9Pw8wtQGfuiUho9x5hIWH6Sv7nsxsaxrLMfv7J0NC2bk8CMplrHqUmpNpPMXnZjjg4STijGE3BroQKBgCTAURdQkraFsuI7LI2W015AysabwKLk0ixrNpnjVjJ4aw7TmlnO1oFg3hHzabi0NhiKSt2lt+nxBS143x4BDpU001nqtSSgaToPkxTch4IdabPGx1GGzXfU2tZiEgtGyQ2Hy61iuFdf/3CQi8LtiPq2qpjj6jIXYE7p+/ccowt1" ],
+        "certificate" : [ "MIICoTCCAYkCBgGbIipzUTANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAlGSElSLUF1dGgwHhcNMjUxMjE1MTMxNzQ2WhcNMzUxMjE1MTMxOTI2WjAUMRIwEAYDVQQDDAlGSElSLUF1dGgwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCDi/mzbDuJ0KlGp9Nv2eRjXsPNhFHXFWZg/sy+Q8kwEkvlvcsS1OvCBn4iNeCvOQMYClcN0nLgszCkoP1nEqp99xwKKPQCniodQ9bUZxBw6fo00+3p1VyIo/adrcBV+/JKhVqTF0Q6rgVYqM2X5QqzZ/kEy9yZqfmfpGcyTNKhyXVi8bosMIjSwRwIcmLGPxavtlpyHsGMtfD1pl7Qe46PzJje6KHJB2bx6jaVGpzUjYCENmeiy9Ya4HookkxCBgW5m8u2TS2JB5peJ21YtbYYChgeZcZ1DZglQ9LJpwfVE1wvwQyUkC0TH6pINKvR/yCA4REltKenTm4nkKhdLB9/AgMBAAEwDQYJKoZIhvcNAQELBQADggEBADFtbf89CHXExDNH/KTTlxARlf1maUUKq6ji6Pkmg3pOaWF0xXzAPmjSzWWPhy5qESD97x06I3362VcwkgW5z7G8wbZonYR9NRowURxoRF0oAKSgdGaBJ7XqnXLJCdUdygmhR6cB55pd7iCtB+Xdqvsj3l1cn7rOqHXVFBqyHL2w8dq/AlFQP0ZKQxRqsLexw68rzTw16jFRGn3mY/Lw78yiSL/1Dc7+lsR3UziGkICQS8FhX73Iib2Scxi3udZ65f+ByLZVTZV50DnmHnuMWkIASqBQQkPNgYKTjFZnlAApMWjBOWNgmQvt2HG2ziQtDseH3MIFb2l/DYS1NXqrPQs=" ],
         "priority" : [ "100" ]
       }
     } ]
   },
   "internationalizationEnabled" : false,
-  "supportedLocales" : [ ],
   "authenticationFlows" : [ {
     "id" : "0662e4c9-15cc-4b92-88d5-a4d544134f4a",
     "alias" : "Account verification options",
@@ -2036,6 +2554,14 @@
     "priority" : 100,
     "config" : { }
   }, {
+    "alias" : "idp_link",
+    "name" : "Linking Identity Provider",
+    "providerId" : "idp_link",
+    "enabled" : true,
+    "defaultAction" : false,
+    "priority" : 120,
+    "config" : { }
+  }, {
     "alias" : "update_user_locale",
     "name" : "Update User Locale",
     "providerId" : "update_user_locale",
@@ -2056,14 +2582,20 @@
     "cibaExpiresIn" : "120",
     "cibaAuthRequestedUserHint" : "login_hint",
     "oauth2DeviceCodeLifespan" : "600",
+    "clientOfflineSessionMaxLifespan" : "0",
     "oauth2DevicePollingInterval" : "5",
+    "clientSessionIdleTimeout" : "0",
     "parRequestUriLifespan" : "60",
+    "clientSessionMaxLifespan" : "0",
+    "clientOfflineSessionIdleTimeout" : "0",
     "cibaInterval" : "5",
     "realmReusableOtpCode" : "false"
   },
-  "keycloakVersion" : "26.0.7",
+  "keycloakVersion" : "26.4.6",
   "userManagedAccessAllowed" : false,
   "organizationsEnabled" : false,
+  "verifiableCredentialsEnabled" : false,
+  "adminPermissionsEnabled" : false,
   "clientProfiles" : {
     "profiles" : [ ]
   },

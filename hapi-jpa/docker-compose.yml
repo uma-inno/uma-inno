@@ -1,16 +1,51 @@
-version: "3"
 services:
-  hapi-fhir-jpaserver-start:
-    build: .
-    container_name: hapi-fhir-jpaserver-start
-    restart: on-failure
+  # Keycloak PostgreSQL Database
+  keycloak-postgres:
+    image: postgres:15-alpine
+    container_name: keycloak-postgres
+    restart: always
     environment:
-      SPRING_DATASOURCE_URL: "jdbc:postgresql://hapi-fhir-postgres:5432/hapi"
-      SPRING_DATASOURCE_USERNAME: "admin"
-      SPRING_DATASOURCE_PASSWORD: "admin"
-      SPRING_DATASOURCE_DRIVERCLASSNAME: "org.postgresql.Driver"
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    ports:
+      - "5433:5432"
+    volumes:
+      - keycloak-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Keycloak Authorization Server
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak-uma
+    command: start-dev --features=preview --import-realm
+    restart: always
+    depends_on:
+      keycloak-postgres:
+        condition: service_healthy
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HTTP_ENABLED: true
+      # PostgreSQL Database Configuration
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
     ports:
       - "8080:8080"
+    volumes:
+      - ../keycloak-config/keycloak-files:/opt/keycloak/data/import
+      - ../keycloak-policies/keycloak-owner-policy.jar:/opt/keycloak/providers/keycloak-owner-policy.jar:ro
+
+  # PostgreSQL Database
   hapi-fhir-postgres:
     image: postgres:15-alpine
     container_name: hapi-fhir-postgres
@@ -19,7 +54,37 @@ services:
       POSTGRES_DB: "hapi"
       POSTGRES_USER: "admin"
       POSTGRES_PASSWORD: "admin"
+    ports:
+      - "5432:5432"
     volumes:
       - hapi-fhir-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d hapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # HAPI FHIR JPA Server
+  hapi-fhir-jpaserver-start:
+    build: .
+    container_name: hapi-fhir-jpaserver-start
+    restart: on-failure
+    depends_on:
+      keycloak:
+        condition: service_started
+      hapi-fhir-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://hapi-fhir-postgres:5432/hapi"
+      SPRING_DATASOURCE_USERNAME: "admin"
+      SPRING_DATASOURCE_PASSWORD: "admin"
+      SPRING_DATASOURCE_DRIVERCLASSNAME: "org.postgresql.Driver"
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
+    ports:
+      - "8081:8081"
+    extra_hosts:
+      - "localhost:host-gateway"
+
 volumes:
   hapi-fhir-postgres:
+  keycloak-postgres-data:

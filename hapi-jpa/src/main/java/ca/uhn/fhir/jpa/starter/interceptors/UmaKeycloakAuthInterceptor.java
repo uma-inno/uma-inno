@@ -9,6 +9,7 @@ import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -19,19 +20,22 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Base64;
+import java.util.List;
+import java.util.ArrayList;
 
 @Component
 public class UmaKeycloakAuthInterceptor {
     private static final Logger logger = LoggerFactory.getLogger(UmaKeycloakAuthInterceptor.class);
     
-    // Use server IP for internal server-to-server communication
-    private static final String AUTHORIZATION_SERVER_URI_INTERNAL = "http://172.29.16.64:8080/realms/FHIR-Auth";
-    // Use external IP for client-facing responses
-    private static final String AUTHORIZATION_SERVER_URI_EXTERNAL = "http://172.29.16.64:8080/realms/FHIR-Auth";
-    
-    private static final String INTROSPECTION_URL = AUTHORIZATION_SERVER_URI_INTERNAL + "/protocol/openid-connect/token/introspect";
-    private static final String PERMISSION_ENDPOINT = AUTHORIZATION_SERVER_URI_INTERNAL + "/authz/protection/permission";
-    private static final String TOKEN_URL = AUTHORIZATION_SERVER_URI_INTERNAL + "/protocol/openid-connect/token";
+    // Use localhost for both internal and external communication
+    // Docker extra_hosts configuration maps localhost to the host machine (host-gateway)
+    // This ensures the FHIR server uses the same URL that Keycloak uses for token issuance
+    private static final String AUTHORIZATION_SERVER_URI = "http://localhost:8080/realms/FHIR-Auth";
+
+    private static final String INTROSPECTION_URL = AUTHORIZATION_SERVER_URI + "/protocol/openid-connect/token/introspect";
+    private static final String PERMISSION_ENDPOINT = AUTHORIZATION_SERVER_URI + "/authz/protection/permission";
+    private static final String TOKEN_URL = AUTHORIZATION_SERVER_URI + "/protocol/openid-connect/token";
     
     private static final String CLIENT_ID = "fhir-client";
     private static final String CLIENT_SECRET = "QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP";
@@ -57,6 +61,40 @@ public class UmaKeycloakAuthInterceptor {
                 return; // Let unconfigured resources pass through
             }
 
+            // FOURTH: For CREATE (POST) operations, check role-based access control (RBAC)
+            // The resource doesn't exist yet, so we can't check instance-level permissions
+            // Instead, we check if the user's role allows them to create this resource type
+            String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
+            if ("POST".equals(httpMethod)) {
+                logger.info("CREATE operation (POST) detected - checking role-based access control");
+
+                // Extract token
+                String authHeader = theRequestDetails.getHeader("Authorization");
+                if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                    logger.warn("No authorization token for CREATE operation");
+                    throw new AuthenticationException("Authorization token required to create resources");
+                }
+                String token = authHeader.substring(7);
+
+                // Extract roles from token
+                List<String> roles = extractRolesFromToken(token);
+                logger.info("User has {} roles: {}", roles.size(), roles);
+
+                if (roles.isEmpty()) {
+                    logger.warn("No roles found in token - denying resource creation");
+                    throw new ForbiddenOperationException("No roles found. Cannot create resources without assigned roles.");
+                }
+
+                // Check if any role allows creating this resource type
+                if (!canRoleCreateResource(roles, resourceType)) {
+                    logger.warn("User roles {} do not have permission to create resource type: {}", roles, resourceType);
+                    throw new ForbiddenOperationException("You do not have permission to create " + resourceType + " resources");
+                }
+
+                logger.info("✓ Role-based access check passed for creating {} with roles: {}", resourceType, roles);
+                return; // Allow creation to proceed
+            }
+
             logger.info("Applying UMA authentication to {} resource", resourceType);
 
             String authHeader = theRequestDetails.getHeader("Authorization");
@@ -67,13 +105,60 @@ public class UmaKeycloakAuthInterceptor {
             }
 
             String token = authHeader.substring(7);
+
+            // FIRST: Check if token is active
             if (!isTokenValid(token)) {
                 logger.warn("Invalid or expired token for request: {}", requestPath);
                 // Handle invalid token the same way as tokenless access - request new permission ticket
                 handleTokenlessAccess(theRequestDetails);
                 return; // handleTokenlessAccess will throw an exception to abort processing
             }
-            logger.debug("Successfully authenticated request to: {}", requestPath);
+
+            // SECOND: Check if token has required permissions for this resource
+
+            String[] requiredScopes = mapHttpMethodToScopes(httpMethod);
+            
+            // Determine if this is instance-level (has ID) or type-level (no ID)
+            String resourceId = theRequestDetails.getId() != null 
+                ? theRequestDetails.getId().getIdPart() : null;
+            String resourceName;
+            if (resourceId != null) {
+                // Instance-level: use "Patient/XX" format 
+                resourceName = resourceType + "/" + resourceId;
+                logger.info("Instance-level permission check for: {}", resourceName);
+            } else {
+                // Type-level: use "PatientResource" format
+                resourceName = mapFhirResourceToKeycloakResource(resourceType);
+                logger.info("Type-level permission check for: {}", resourceName);
+            }
+
+            logger.info("=== PERMISSION CHECK START ===");
+            logger.info("HTTP Method: {}, Required Scopes: {}, Resource Name: {}",
+                       httpMethod, String.join(",", requiredScopes), resourceName);
+
+            // Validate that the token has at least one of the required scopes
+            boolean hasPermission = false;
+            for (String scope : requiredScopes) {
+                logger.info("Checking if token has permission for scope: {}", scope);
+                if (hasRequiredPermission(token, resourceName, scope)) {
+                    hasPermission = true;
+                    logger.info("✓ Token has permission for scope: {}", scope);
+                    break;
+                }
+            }
+
+            logger.info("=== PERMISSION CHECK END - Result: {} ===", hasPermission ? "GRANTED" : "DENIED");
+
+            if (!hasPermission) {
+                logger.warn("Token does not have required permissions for resource: {}, scopes: {}",
+                           resourceName, String.join(",", requiredScopes));
+                // Request new permission ticket with updated permissions
+                handleTokenlessAccess(theRequestDetails);
+                return;
+            }
+
+            logger.info("Successfully authenticated and authorized request to: {} with resource: {}",
+                       requestPath, resourceName);
             // Continue processing by returning normally
         } catch (AuthenticationException | ForbiddenOperationException e) {
             // Re-throw expected UMA exceptions
@@ -86,22 +171,15 @@ public class UmaKeycloakAuthInterceptor {
     }
 
     private boolean shouldHandleResource(String resourceType) {
-        // Only handle resources that are configured in Keycloak
-        // For now, only Patient is configured
         switch (resourceType) {
             case "Patient":
                 return true;
-            // Uncomment these as you add them to Keycloak:
-            // case "Observation":
-            // case "Practitioner":
-            // case "Organization":
-            // case "Encounter":
-            // case "Condition":
-            // case "Medication":
-            // case "MedicationRequest":
-            // case "DiagnosticReport":
-            // case "ServiceRequest":
-            //     return true;
+            case "AllergyIntolerance":
+                return true;
+            case "MedicationStatement":
+                return true;
+            case "Condition":
+                return true;
             default:
                 return false;
         }
@@ -130,8 +208,8 @@ public class UmaKeycloakAuthInterceptor {
     private String requestPermissionTicket(RequestDetails theRequestDetails) {
         try {
             PermissionRequest permissionRequest = buildPermissionRequest(theRequestDetails);
-            logger.debug("Built permission request: resourceId={}, scopes={}", 
-                        permissionRequest.getResource_id(), 
+            logger.debug("Built permission request: resourceId={}, scopes={}",
+                        permissionRequest.getResource_id(),
                         String.join(",", permissionRequest.getResource_scopes()));
             
             try (CloseableHttpClient client = HttpClients.createDefault()) {
@@ -180,20 +258,93 @@ public class UmaKeycloakAuthInterceptor {
         String resourcePath = theRequestDetails.getRequestPath();
         String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
         String resourceType = extractResourceType(resourcePath);
-        String resourceId = extractResourceId(resourcePath);
-        
-        // Map FHIR resource to Keycloak resource
-        String resourceIdentifier = mapFhirResourceToKeycloakResource(resourceType);
-        
+
+        // Use theRequestDetails.getId() for reliable resource ID extraction (same as handleRequest)
+        String resourceId = theRequestDetails.getId() != null
+            ? theRequestDetails.getId().getIdPart() : null;
+
+        // Use instance-level resource identifier if ID present, otherwise type-level
+        String resourceName;
+        if (resourceId != null) {
+            // Instance-level: use "Patient/XX" format (matches Keycloak UMA registration)
+            resourceName = resourceType + "/" + resourceId;
+            logger.info("PERMISSION REQUEST: Using INSTANCE-LEVEL resource: {}", resourceName);
+        } else {
+            // Type-level: use "PatientResource" format
+            resourceName = mapFhirResourceToKeycloakResource(resourceType);
+            logger.info("PERMISSION REQUEST: Using TYPE-LEVEL resource: {}", resourceName);
+        }
+
+        // Look up the resource UUID from Keycloak
+        // Keycloak's Protection API requires the UUID, not the name
+        String resourceUuid = lookupResourceUuid(resourceName);
+        if (resourceUuid == null) {
+            logger.warn("Could not find resource UUID for: {}", resourceName);
+            // Fall back to using the resource name (will likely fail)
+            resourceUuid = resourceName;
+        }
+
         // Map HTTP method to scopes
         String[] scopes = mapHttpMethodToScopes(httpMethod);
-        
-        logger.info("Created resource identifier for UMA: {} (mapped from FHIR resource: {})", resourceIdentifier, resourceType);
-        logger.debug("Building permission request - Path: {}, Resource: {}, ID: {}, Method: {}, Scopes: {}", 
+
+        logger.info("Using resource UUID: {} for resource name: {}", resourceUuid, resourceName);
+        logger.debug("Building permission request - Path: {}, Resource: {}, ID: {}, Method: {}, Scopes: {}",
                     resourcePath, resourceType, resourceId, httpMethod, String.join(",", scopes));
-        
-        // Use the scopes based on HTTP method
-        return new PermissionRequest(resourceIdentifier, scopes);
+
+        // Use the resource UUID in the permission request
+        return new PermissionRequest(resourceUuid, scopes);
+    }
+
+    /**
+     * Look up the UUID of a resource in Keycloak by its name
+     *
+     * @param resourceName The resource name (e.g., "Patient/352" or "PatientResource")
+     * @return The resource UUID, or null if not found
+     */
+    private String lookupResourceUuid(String resourceName) {
+        try {
+            String protectionToken = getProtectionApiToken();
+            if (protectionToken == null) {
+                logger.error("Failed to obtain protection API token for resource lookup");
+                return null;
+            }
+
+            // Keycloak's resource search endpoint - use GET, not POST
+            String resourceSearchUrl = AUTHORIZATION_SERVER_URI + "/authz/protection/resource_set?name=" + resourceName;
+
+            try (CloseableHttpClient client = HttpClients.createDefault()) {
+                HttpGet get = new HttpGet(resourceSearchUrl);
+                get.setHeader("Authorization", "Bearer " + protectionToken);
+
+                try (CloseableHttpResponse response = client.execute(get)) {
+                    String responseBody = EntityUtils.toString(response.getEntity());
+                    int statusCode = response.getStatusLine().getStatusCode();
+
+                    logger.debug("Resource lookup response - Status: {}, Body: {}", statusCode, responseBody);
+
+                    if (statusCode == 200) {
+                        ObjectMapper mapper = new ObjectMapper();
+                        JsonNode jsonResponse = mapper.readTree(responseBody);
+
+                        // The response is an array of resource IDs
+                        if (jsonResponse.isArray() && jsonResponse.size() > 0) {
+                            String uuid = jsonResponse.get(0).asText();
+                            logger.info("Found resource UUID: {} for name: {}", uuid, resourceName);
+                            return uuid;
+                        } else {
+                            logger.warn("No resource found with name: {}", resourceName);
+                            return null;
+                        }
+                    } else {
+                        logger.error("Resource lookup failed - Status: {}, Response: {}", statusCode, responseBody);
+                        return null;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error looking up resource UUID for: {}", resourceName, e);
+            return null;
+        }
     }
 
     private String mapFhirResourceToKeycloakResource(String fhirResourceType) {
@@ -301,16 +452,16 @@ public class UmaKeycloakAuthInterceptor {
             if (response != null) {
                 String wwwAuthenticateHeader = String.format(
                     "UMA realm=\"%s\", as_uri=\"%s\", ticket=\"%s\"",
-                    "FHIR-Auth", 
-                    AUTHORIZATION_SERVER_URI_EXTERNAL,  // Use external URI for client response
+                    "FHIR-Auth",
+                    AUTHORIZATION_SERVER_URI,
                     permissionTicket
                 );
                 response.setHeader("WWW-Authenticate", wwwAuthenticateHeader);
             }
         }
-        
-        logger.info("Responding with permission ticket - Ticket: {}, AS URI: {}", 
-                   permissionTicket, AUTHORIZATION_SERVER_URI_EXTERNAL);
+
+        logger.info("Responding with permission ticket - Ticket: {}, AS URI: {}",
+                   permissionTicket, AUTHORIZATION_SERVER_URI);
                    
         // Throw AuthenticationException with 401 status - HAPI FHIR will handle the response
         throw new AuthenticationException("Access token required. Use permission ticket to obtain access token.");
@@ -361,22 +512,35 @@ public class UmaKeycloakAuthInterceptor {
     }
 
     private boolean isTokenValid(String token) {
+        logger.info("Starting token introspection for token: {}...", token.substring(0, Math.min(50, token.length())));
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             HttpPost post = new HttpPost(INTROSPECTION_URL);
             post.setHeader("Content-Type", "application/x-www-form-urlencoded");
             String body = "client_id=" + CLIENT_ID + "&client_secret=" + CLIENT_SECRET + "&token=" + token;
             post.setEntity(new StringEntity(body));
-            
+
+            logger.info("Sending introspection request to: {}", INTROSPECTION_URL);
+
             try (CloseableHttpResponse response = client.execute(post)) {
                 String responseBody = EntityUtils.toString(response.getEntity());
+                int statusCode = response.getStatusLine().getStatusCode();
+
+                logger.info("Introspection response - Status: {}, Body: {}", statusCode, responseBody);
+
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode jsonNode = mapper.readTree(responseBody);
+
+                if (!jsonNode.has("active")) {
+                    logger.error("Introspection response missing 'active' field");
+                    return false;
+                }
+
                 boolean isActive = jsonNode.get("active").asBoolean();
-                
+
                 if (isActive) {
-                    logger.debug("Token introspection successful - token is active");
+                    logger.info("Token introspection successful - token is active");
                 } else {
-                    logger.debug("Token introspection indicates token is not active");
+                    logger.warn("Token introspection indicates token is not active");
                 }
                 return isActive;
             }
@@ -409,21 +573,250 @@ public class UmaKeycloakAuthInterceptor {
         return isPublic;
     }
 
+    /**
+     * Extracts permissions from an RPT token by decoding the JWT payload
+     *
+     * @param token The RPT token (JWT)
+     * @return List of permissions granted in the token
+     */
+    private List<RptPermission> extractPermissionsFromRPT(String token) {
+        List<RptPermission> permissions = new ArrayList<>();
+
+        try {
+            // JWT structure: header.payload.signature
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) {
+                logger.warn("Invalid JWT format - expected 3 parts, got {}", parts.length);
+                return permissions;
+            }
+
+            // Decode the payload (second part)
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+            logger.info("=== DECODED JWT PAYLOAD START ===");
+            logger.info("{}", payload);
+            logger.info("=== DECODED JWT PAYLOAD END ===");
+
+            // Parse JSON
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode payloadJson = mapper.readTree(payload);
+
+            // Check if authorization field exists
+            if (!payloadJson.has("authorization")) {
+                logger.warn("JWT payload does NOT contain 'authorization' field!");
+                logger.warn("Available fields: {}", payloadJson.fieldNames());
+                return permissions;
+            }
+
+            // Extract authorization.permissions
+            JsonNode authNode = payloadJson.get("authorization");
+            logger.info("Found 'authorization' field: {}", authNode.toString());
+
+            if (!authNode.has("permissions")) {
+                logger.warn("'authorization' field does NOT contain 'permissions' array!");
+                return permissions;
+            }
+
+            JsonNode permissionsNode = authNode.get("permissions");
+            logger.info("Found 'permissions' array with {} entries", permissionsNode.size());
+
+            for (JsonNode permNode : permissionsNode) {
+                RptPermission permission = new RptPermission();
+
+                if (permNode.has("rsid")) {
+                    permission.setRsid(permNode.get("rsid").asText());
+                }
+                if (permNode.has("rsname")) {
+                    permission.setRsname(permNode.get("rsname").asText());
+                }
+                if (permNode.has("scopes")) {
+                    JsonNode scopesNode = permNode.get("scopes");
+                    List<String> scopesList = new ArrayList<>();
+                    for (JsonNode scopeNode : scopesNode) {
+                        scopesList.add(scopeNode.asText());
+                    }
+                    permission.setScopes(scopesList);
+                }
+
+                permissions.add(permission);
+                logger.info("Extracted permission: rsname={}, rsid={}, scopes={}",
+                           permission.getRsname(), permission.getRsid(), permission.getScopes());
+            }
+
+            logger.info("Successfully extracted {} permissions from RPT", permissions.size());
+        } catch (Exception e) {
+            logger.error("Error extracting permissions from RPT", e);
+            logger.error("Token preview: {}...", token.substring(0, Math.min(50, token.length())));
+        }
+
+        return permissions;
+    }
+
+    /**
+     * Validates if the token has the required permission for the requested resource
+     *
+     * @param token The RPT token
+     * @param resourceName The Keycloak resource name (e.g., "Patient/52" or "PatientResource")
+     * @param requiredScope The required scope (e.g., "read")
+     * @return true if the token has the required permission
+     */
+    private boolean hasRequiredPermission(String token, String resourceName, String requiredScope) {
+        logger.info("Checking permission for resource: {}, scope: {}", resourceName, requiredScope);
+
+        List<RptPermission> permissions = extractPermissionsFromRPT(token);
+
+        logger.info("Total permissions extracted: {}", permissions.size());
+
+        // STRICT INSTANCE-LEVEL: Only accept exact resource name match
+        // e.g., if checking for "Patient/52", only "Patient/52" is accepted, NOT "PatientResource"
+        for (RptPermission permission : permissions) {
+            logger.info("Checking permission - rsname: {}, scopes: {}",
+                       permission.getRsname(), permission.getScopes());
+
+            // Check if resource name matches EXACTLY (strict instance-level)
+            if (resourceName.equals(permission.getRsname())) {
+                logger.info("Resource name matches! Checking scopes...");
+                // Check if required scope is present
+                if (permission.getScopes() != null && permission.getScopes().contains(requiredScope)) {
+                    logger.info("✓ Permission validated: resource={}, scope={}", resourceName, requiredScope);
+                    return true;
+                } else {
+                    logger.warn("Resource name matches but required scope '{}' not found. Available scopes: {}",
+                               requiredScope, permission.getScopes());
+                }
+            } else {
+                logger.debug("Resource name mismatch: expected '{}', got '{}'",
+                            resourceName, permission.getRsname());
+            }
+        }
+
+        logger.warn("✗ Required permission NOT found: resource={}, scope={}", resourceName, requiredScope);
+        return false;
+    }
+
+    /**
+     * Represents a permission granted in an RPT token
+     */
+    public static class RptPermission {
+        private String rsid;    // Resource ID
+        private String rsname;  // Resource name
+        private List<String> scopes; // Granted scopes
+
+        public String getRsid() { return rsid; }
+        public void setRsid(String rsid) { this.rsid = rsid; }
+
+        public String getRsname() { return rsname; }
+        public void setRsname(String rsname) { this.rsname = rsname; }
+
+        public List<String> getScopes() { return scopes; }
+        public void setScopes(List<String> scopes) { this.scopes = scopes; }
+    }
+
     public static class PermissionRequest {
+        // Keycloak expects the UUID in resource_id field
         private String resource_id;
         private String[] resource_scopes;
-        
-        public PermissionRequest(String resourceIdentifier, String[] scopes) {
-            this.resource_id = resourceIdentifier;
+
+        public PermissionRequest(String resourceId, String[] scopes) {
+            this.resource_id = resourceId;
             this.resource_scopes = scopes;
         }
-        
+
         // Jackson serialization getters
         public String getResource_id() { return resource_id; }
         public String[] getResource_scopes() { return resource_scopes; }
-        
+
         // Jackson deserialization setters (required for JSON parsing)
         public void setResource_id(String resource_id) { this.resource_id = resource_id; }
         public void setResource_scopes(String[] resource_scopes) { this.resource_scopes = resource_scopes; }
+    }
+
+    /**
+     * Extract roles from JWT token.
+     * Keycloak stores realm roles in: realm_access.roles
+     *
+     * @param token The JWT token
+     * @return List of roles, or empty list if none found
+     */
+    private List<String> extractRolesFromToken(String token) {
+        List<String> roles = new ArrayList<>();
+
+        try {
+            // JWT: header.payload.signature
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) {
+                logger.warn("Invalid JWT format - expected 3 parts, got {}", parts.length);
+                return roles;
+            }
+
+            // Decode payload
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode payloadJson = mapper.readTree(payload);
+
+            // Extract realm_access.roles
+            if (payloadJson.has("realm_access")) {
+                JsonNode realmAccess = payloadJson.get("realm_access");
+                if (realmAccess.has("roles")) {
+                    JsonNode rolesNode = realmAccess.get("roles");
+                    for (JsonNode roleNode : rolesNode) {
+                        roles.add(roleNode.asText());
+                    }
+                    logger.info("Extracted {} roles from token: {}", roles.size(), roles);
+                }
+            } else {
+                logger.debug("Token does not contain realm_access field");
+            }
+        } catch (Exception e) {
+            logger.error("Error extracting roles from token", e);
+        }
+
+        return roles;
+    }
+
+    /**
+     * Check if any of the user's roles allow creating the specified resource type.
+     *
+     * RBAC Rules:
+     * - patient: Cannot create any resources
+     * - practitioner/doctor: Can create Patient and clinical resources
+     * - admin: Can create everything
+     *
+     * @param roles List of user's roles
+     * @param resourceType The FHIR resource type to create
+     * @return true if any role allows creation, false otherwise
+     */
+    private boolean canRoleCreateResource(List<String> roles, String resourceType) {
+        for (String role : roles) {
+            switch (role.toLowerCase()) {
+                case "patient":
+                    // Patients cannot create any resources
+                    logger.debug("Role 'patient' cannot create resources");
+                    continue;
+
+                case "doctor":
+                    // Practitioners can create Patient and clinical resources
+                    boolean canCreate = "Patient".equals(resourceType) ||
+                                      "Condition".equals(resourceType) ||
+                                      "AllergyIntolerance".equals(resourceType) ||
+
+                                      "MedicationStatement".equals(resourceType);
+                    if (canCreate) {
+                        logger.info("Role '{}' can create {}", role, resourceType);
+                        return true;
+                    }
+                    break;
+
+                case "admin":
+                    // Admins can create everything
+                    logger.info("Role 'admin' can create any resource");
+                    return true;
+
+                default:
+                    logger.debug("Unknown role '{}' - no creation permission", role);
+            }
+        }
+
+        logger.warn("No role found that allows creating {}", resourceType);
+        return false;
     }
 }
