@@ -836,92 +836,6 @@
           "name" : "create"
         } ],
         "icon_uri" : ""
-      }, {
-        "name" : "Condition/554",
-        "type" : "Condition",
-        "owner" : {
-          "name" : "alice"
-        },
-        "ownerManagedAccess" : true,
-        "displayName" : "Condition/554",
-        "attributes" : { },
-        "uris" : [ ],
-        "scopes" : [ {
-          "name" : "read"
-        }, {
-          "name" : "write"
-        }, {
-          "name" : "delete"
-        } ]
-      }, {
-        "name" : "AllergyIntolerance/555",
-        "type" : "AllergyIntolerance",
-        "owner" : {
-          "name" : "alice"
-        },
-        "ownerManagedAccess" : true,
-        "displayName" : "AllergyIntolerance/555",
-        "attributes" : { },
-        "uris" : [ ],
-        "scopes" : [ {
-          "name" : "read"
-        }, {
-          "name" : "write"
-        }, {
-          "name" : "delete"
-        } ]
-      }, {
-        "name" : "Patient/602",
-        "type" : "Patient",
-        "owner" : {
-          "name" : "system-placeholder"
-        },
-        "ownerManagedAccess" : true,
-        "displayName" : "Patient/602",
-        "attributes" : { },
-        "uris" : [ ],
-        "scopes" : [ {
-          "name" : "read"
-        }, {
-          "name" : "write"
-        }, {
-          "name" : "delete"
-        } ],
-        "icon_uri" : ""
-      }, {
-        "name" : "Patient/552",
-        "type" : "Patient",
-        "owner" : {
-          "name" : "alice"
-        },
-        "ownerManagedAccess" : true,
-        "displayName" : "Patient/552",
-        "attributes" : { },
-        "uris" : [ ],
-        "scopes" : [ {
-          "name" : "read"
-        }, {
-          "name" : "write"
-        }, {
-          "name" : "delete"
-        } ]
-      }, {
-        "name" : "AllergyIntolerance/553",
-        "type" : "AllergyIntolerance",
-        "owner" : {
-          "name" : "alice"
-        },
-        "ownerManagedAccess" : true,
-        "displayName" : "AllergyIntolerance/553",
-        "attributes" : { },
-        "uris" : [ ],
-        "scopes" : [ {
-          "name" : "read"
-        }, {
-          "name" : "write"
-        }, {
-          "name" : "delete"
-        } ]
       } ],
       "policies" : [ {
         "name" : "Allow fhir-client Policy",
@@ -1180,39 +1094,6 @@
           "defaultResourceType" : "MediactionStatement",
           "applyPolicies" : "[\"Resource Owner Policy\"]",
           "scopes" : "[\"write\",\"read\",\"delete\"]"
-        }
-      }, {
-        "name" : "Dr.Bob read access Condition/554",
-        "description" : "",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"Condition/554\"]",
-          "scopes" : "[\"read\"]",
-          "applyPolicies" : "[\"Dr. Bob User Policy\"]"
-        }
-      }, {
-        "name" : "Dr. Smith access to Patient 552 (alice)",
-        "description" : "",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"Patient/552\"]",
-          "scopes" : "[\"read\"]",
-          "applyPolicies" : "[\"Dr Smith User Policy\"]"
-        }
-      }, {
-        "name" : "Dr Smith access to Allergy/555 (alice) scope",
-        "description" : "",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"AllergyIntolerance/555\"]",
-          "scopes" : "[\"read\"]",
-          "applyPolicies" : "[\"Dr Smith User Policy\"]"
         }
       } ],
       "scopes" : [ {
