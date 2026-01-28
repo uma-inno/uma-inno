@@ -22,7 +22,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:latest
     container_name: keycloak-uma
-    command: start-dev --import-realm --features=preview
+    command: start-dev --features=preview --import-realm
     restart: always
     depends_on:
       keycloak-postgres:
@@ -42,7 +42,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ../keycloak config:/opt/keycloak/data/import:ro
+      - ../keycloak-config/keycloak-files:/opt/keycloak/data/import
       - ../keycloak-policies/keycloak-owner-policy.jar:/opt/keycloak/providers/keycloak-owner-policy.jar:ro
 
   # PostgreSQL Database
