@@ -45,6 +45,8 @@ cd ../keycloak-config
 | [2-Technical-Overview.md](2-Technical-Overview.md) | Architecture and UMA implementation |
 | [3-Keycloak-Configuration.md](3-Keycloak-Configuration.md) | Keycloak setup and test users |
 | [4-API-Reference.md](4-API-Reference.md) | API endpoints and examples |
+| [5-Project-Structure.md](5-Project-Structure.md) | Important directories and files |
+| [6-$summary-Operation.md](6-$summary-Operation.md) | Proposed $summary operation (not implemented) |
 | [curl-testing-commands.md](../keycloak-config/curl-testing-commands.md) | Testing guide |
 
 ---
