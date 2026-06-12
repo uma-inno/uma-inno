@@ -436,9 +436,9 @@ public class UmaKeycloakAuthInterceptor {
     private String[] mapHttpMethodToScopes(String httpMethod) {
         switch (httpMethod.toUpperCase()) {
             case "GET": return new String[]{"patient/Patient.r"};
-            case "POST": return new String[]{"patient/Patient.r"};
-            case "PUT": return new String[]{"patient/Patient.r"};
-            case "DELETE": return new String[]{"patient/Patient.r"};
+            case "POST": return new String[]{"patient/Patient.c"};
+            case "PUT": return new String[]{"patient/Patient.u"};
+            case "DELETE": return new String[]{"patient/Patient.d"};
             default: return new String[]{"patient/Patient.r"};
         }
     }
@@ -697,20 +697,48 @@ public class UmaKeycloakAuthInterceptor {
                 continue;
             }
 
-            // Accept if any scope in the RPT starts with "patient/" — token has access to this patient
             for (String grantedScope : permission.getScopes()) {
-                if (grantedScope.startsWith("patient/")) {
-                    logger.info("✓ Permission validated: resource={}, granted scope={}", resourceName, grantedScope);
+                if (scopeCovers(grantedScope, requiredScope)) {
+                    logger.info("✓ Permission validated: resource={}, granted scope={} covers required={}",
+                               resourceName, grantedScope, requiredScope);
                     return true;
                 }
             }
 
-            logger.warn("Resource matches but no patient/ scope found. Available scopes: {}",
-                       permission.getScopes());
+            logger.warn("Resource matches but no granted scope covers '{}'. Available scopes: {}",
+                       requiredScope, permission.getScopes());
         }
 
         logger.warn("✗ Required permission NOT found: resource={}, scope={}", resourceName, requiredScope);
         return false;
+    }
+
+    /**
+     * SMART v2 scope semantics: a granted scope covers the required scope when
+     * context and resource type are identical and the granted interaction set
+     * contains every required interaction (e.g. patient/Patient.rs covers
+     * patient/Patient.r, but patient/Condition.rs does NOT cover patient/Patient.r).
+     */
+    private boolean scopeCovers(String grantedScope, String requiredScope) {
+        int grantedDot = grantedScope.lastIndexOf('.');
+        int requiredDot = requiredScope.lastIndexOf('.');
+        if (grantedDot < 0 || requiredDot < 0) {
+            return false;
+        }
+
+        // "patient/Patient" part must match exactly
+        if (!grantedScope.substring(0, grantedDot).equals(requiredScope.substring(0, requiredDot))) {
+            return false;
+        }
+
+        // every required interaction (c/r/u/d/s) must be granted
+        String grantedOps = grantedScope.substring(grantedDot + 1);
+        for (char op : requiredScope.substring(requiredDot + 1).toCharArray()) {
+            if (grantedOps.indexOf(op) < 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
