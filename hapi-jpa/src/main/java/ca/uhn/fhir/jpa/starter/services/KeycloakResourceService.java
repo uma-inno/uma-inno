@@ -103,6 +103,8 @@ public class KeycloakResourceService {
             scopes.add(createScope("patient/Patient.r"));
             scopes.add(createScope("patient/Patient.rs"));
             scopes.add(createScope("patient/Condition.rs"));
+            scopes.add(createScope("patient/MedicationStatement.rs"));
+            scopes.add(createScope("patient/AllergyIntolerance.rs"));
             resource.setScopes(scopes);
 
             // Create Resource in Keycloak
