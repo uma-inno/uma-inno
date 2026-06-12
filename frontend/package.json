@@ -1,0 +1,14 @@
+{
+  "name": "uma-fhir-frontend",
+  "version": "1.0.0",
+  "description": "Demo-Frontend fuer den UMA-geschuetzten HAPI FHIR Server",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.0"
+  }
+}
