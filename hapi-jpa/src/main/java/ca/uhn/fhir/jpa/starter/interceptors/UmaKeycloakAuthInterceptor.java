@@ -2,9 +2,13 @@ package ca.uhn.fhir.jpa.starter.interceptors;
 
 import ca.uhn.fhir.interceptor.api.Hook;
 import ca.uhn.fhir.interceptor.api.Pointcut;
+import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
+import ca.uhn.fhir.jpa.starter.services.UmaBlacklistService;
+import ca.uhn.fhir.jpa.starter.services.UmaTokenValidator;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import ca.uhn.fhir.rest.server.exceptions.AuthenticationException;
 import ca.uhn.fhir.rest.server.exceptions.ForbiddenOperationException;
+import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
 import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,18 +19,37 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
+import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.r5.model.AllergyIntolerance;
+import org.hl7.fhir.r5.model.Condition;
+import org.hl7.fhir.r5.model.IdType;
+import org.hl7.fhir.r5.model.MedicationStatement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.ArrayList;
 
 @Component
 public class UmaKeycloakAuthInterceptor {
     private static final Logger logger = LoggerFactory.getLogger(UmaKeycloakAuthInterceptor.class);
+
+    @Autowired
+    private UmaTokenValidator tokenValidator;
+
+    @Autowired
+    private UmaBlacklistService blacklistService;
+
+    @Autowired
+    private DaoRegistry daoRegistry;
     
     // Use localhost for both internal and external communication
     // Docker extra_hosts configuration maps localhost to the host machine (host-gateway)
@@ -97,48 +120,58 @@ public class UmaKeycloakAuthInterceptor {
 
             logger.info("Applying UMA authentication to {} resource", resourceType);
 
+            // Ziel-Patient bestimmen: bei Patient direkt aus der URL, bei klinischen
+            // Ressourcen ueber den patient=/subject= Suchparameter bzw. das subject der
+            // angefragten Instanz. Die UMA-Ressource in Keycloak ist immer Patient/<id>.
+            String resourceId = theRequestDetails.getId() != null
+                ? theRequestDetails.getId().getIdPart() : null;
+            boolean isSearch = resourceId == null;
+            String patientId = resolvePatientId(theRequestDetails, resourceType, resourceId);
+
+            if (patientId == null) {
+                if ("Patient".equals(resourceType)) {
+                    logger.warn("Type-level Patient access not supported: {}", requestPath);
+                    throw new ForbiddenOperationException("Type-level Patient access is not supported");
+                }
+                if (resourceId != null) {
+                    // Instanz nicht gefunden oder ohne Patientenbezug — HAPI antwortet selbst (404 etc.)
+                    logger.info("No subject patient resolvable for {}/{} — passing through", resourceType, resourceId);
+                    return;
+                }
+                throw new ForbiddenOperationException(
+                    "Requests for " + resourceType + " must be patient-scoped (use ?patient=<id>)");
+            }
+
+            String resourceName = "Patient/" + patientId;
+
             String authHeader = theRequestDetails.getHeader("Authorization");
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 logger.info("No authorization header found, handling tokenless access for: {}", requestPath);
-                handleTokenlessAccess(theRequestDetails);
+                handleTokenlessAccess(theRequestDetails, resourceName);
                 return; // handleTokenlessAccess will throw an exception to abort processing
             }
 
             String token = authHeader.substring(7);
 
-            // FIRST: Check if token is an RPT (has authorization.permissions) or a plain access token
+            // Check if token is an RPT (has authorization.permissions) or a plain access token
             boolean isRpt = tokenHasPermissions(token);
 
             if (!isRpt) {
-                // Plain access token — check it is active via introspection
-                if (!isTokenValid(token)) {
-                    logger.warn("Invalid or expired token for request: {}", requestPath);
-                    handleTokenlessAccess(theRequestDetails);
-                    return;
-                }
-                // Active plain token but no permissions yet — request permission ticket
-                logger.info("Token is valid but has no UMA permissions — requesting permission ticket");
-                handleTokenlessAccess(theRequestDetails);
+                // Plain access token — Permission Ticket ausstellen
+                logger.info("Token has no UMA permissions — requesting permission ticket");
+                handleTokenlessAccess(theRequestDetails, resourceName);
                 return;
             }
 
-            // SECOND: Token is an RPT — check permissions directly from JWT (no introspection needed)
-
-            String[] requiredScopes = mapHttpMethodToScopes(httpMethod);
-            
-            // Determine if this is instance-level (has ID) or type-level (no ID)
-            String resourceId = theRequestDetails.getId() != null 
-                ? theRequestDetails.getId().getIdPart() : null;
-            String resourceName;
-            if (resourceId != null) {
-                // Instance-level: use "Patient/XX" format 
-                resourceName = resourceType + "/" + resourceId;
-                logger.info("Instance-level permission check for: {}", resourceName);
-            } else {
-                // Type-level: use "PatientResource" format
-                resourceName = mapFhirResourceToKeycloakResource(resourceType);
-                logger.info("Type-level permission check for: {}", resourceName);
+            // === Stufe 1: Signatur + Ablaufzeit lokal pruefen (kein Introspection-Call) ===
+            if (!tokenValidator.isValid(token)) {
+                logger.warn("RPT failed local validation (signature/expiry) for: {}", requestPath);
+                handleTokenlessAccess(theRequestDetails, resourceName);
+                return;
             }
+
+            // === Stufe 2: Typ-Scope pruefen ===
+            String[] requiredScopes = requiredScopesFor(theRequestDetails, resourceType, httpMethod, isSearch);
 
             logger.info("=== PERMISSION CHECK START ===");
             logger.info("HTTP Method: {}, Required Scopes: {}, Resource Name: {}",
@@ -147,7 +180,6 @@ public class UmaKeycloakAuthInterceptor {
             // Validate that the token has at least one of the required scopes
             boolean hasPermission = false;
             for (String scope : requiredScopes) {
-                logger.info("Checking if token has permission for scope: {}", scope);
                 if (hasRequiredPermission(token, resourceName, scope)) {
                     hasPermission = true;
                     logger.info("✓ Token has permission for scope: {}", scope);
@@ -161,8 +193,22 @@ public class UmaKeycloakAuthInterceptor {
                 logger.warn("Token does not have required permissions for resource: {}, scopes: {}",
                            resourceName, String.join(",", requiredScopes));
                 // Request new permission ticket with updated permissions
-                handleTokenlessAccess(theRequestDetails);
+                handleTokenlessAccess(theRequestDetails, resourceName);
                 return;
+            }
+
+            // === Stufe 3: granulare Scopes pruefen (?category=) ===
+            if (isSearch && !"Patient".equals(resourceType)) {
+                enforceGranularScopes(theRequestDetails, token, resourceName, resourceType);
+            }
+
+            // === Stufe 4: Blacklist-Check fuer Instanz-Zugriffe (gecachter Keycloak-Call) ===
+            if (!"Patient".equals(resourceType) && resourceId != null) {
+                String userId = extractSubFromToken(token);
+                if (blacklistService.isBlacklisted(patientId, resourceType, resourceId, userId)) {
+                    logger.warn("Blacklist DENY for {}/{} (user {})", resourceType, resourceId, userId);
+                    throw new ForbiddenOperationException("Access to this resource has been revoked by the patient");
+                }
             }
 
             logger.info("Successfully authenticated and authorized request to: {} with resource: {}",
@@ -179,13 +225,138 @@ public class UmaKeycloakAuthInterceptor {
     }
 
     private boolean shouldHandleResource(String resourceType) {
-        return "Patient".equals(resourceType);
+        switch (resourceType) {
+            case "Patient":
+            case "Condition":
+            case "AllergyIntolerance":
+            case "MedicationStatement":
+                return true;
+            default:
+                return false;
+        }
     }
 
-    private void handleTokenlessAccess(RequestDetails theRequestDetails) {
-        logger.info("Handling tokenless access for: {}", theRequestDetails.getRequestPath());
+    /**
+     * Bestimmt den Patienten, dem die angefragte Ressource gehoert.
+     * Patient: ID direkt aus der URL. Klinische Ressourcen: bei Searches aus dem
+     * patient=/subject= Parameter, bei Instanz-Zugriffen aus dem subject der Instanz.
+     */
+    private String resolvePatientId(RequestDetails theRequestDetails, String resourceType, String resourceId) {
+        if ("Patient".equals(resourceType)) {
+            return resourceId;
+        }
+        if (resourceId != null) {
+            return readSubjectPatientId(resourceType, resourceId);
+        }
+        Map<String, String[]> params = theRequestDetails.getParameters();
+        for (String paramName : new String[]{"patient", "subject"}) {
+            String[] values = params.get(paramName);
+            if (values != null && values.length > 0 && values[0] != null && !values[0].isEmpty()) {
+                String value = values[0];
+                return value.startsWith("Patient/") ? value.substring("Patient/".length()) : value;
+            }
+        }
+        return null;
+    }
+
+    private String readSubjectPatientId(String resourceType, String resourceId) {
         try {
-            String permissionTicket = requestPermissionTicket(theRequestDetails);
+            IBaseResource resource = daoRegistry.getResourceDao(resourceType)
+                .read(new IdType(resourceType, resourceId), null);
+            String reference = null;
+            if (resource instanceof Condition) {
+                reference = ((Condition) resource).getSubject().getReference();
+            } else if (resource instanceof AllergyIntolerance) {
+                reference = ((AllergyIntolerance) resource).getPatient().getReference();
+            } else if (resource instanceof MedicationStatement) {
+                reference = ((MedicationStatement) resource).getSubject().getReference();
+            }
+            if (reference != null && reference.startsWith("Patient/")) {
+                return reference.substring("Patient/".length());
+            }
+        } catch (ResourceNotFoundException e) {
+            logger.debug("Resource {}/{} not found while resolving subject", resourceType, resourceId);
+        } catch (Exception e) {
+            logger.warn("Error resolving subject patient for {}/{}: {}", resourceType, resourceId, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Stufe 3: granulare Scopes. Traegt ein gewaehrter Scope einen Filter
+     * (z.B. patient/Condition.rs?category=problem-list-item), wird die Suche auf die
+     * erlaubten Kategorien eingeschraenkt (Scope Narrowing) bzw. eine explizit
+     * widersprechende Anfrage abgelehnt. Scopes ohne Filter = Vollzugriff auf den Typ.
+     */
+    private void enforceGranularScopes(RequestDetails theRequestDetails, String token,
+                                       String resourceName, String resourceType) {
+        Set<String> allowedCategories = new LinkedHashSet<>();
+        boolean unrestricted = false;
+        String typePrefix = "patient/" + resourceType + ".";
+
+        for (RptPermission permission : extractPermissionsFromRPT(token)) {
+            if (!resourceName.equals(permission.getRsname()) || permission.getScopes() == null) {
+                continue;
+            }
+            for (String granted : permission.getScopes()) {
+                int filterIdx = granted.indexOf('?');
+                String base = filterIdx < 0 ? granted : granted.substring(0, filterIdx);
+                if (!base.startsWith(typePrefix)) {
+                    continue;
+                }
+                if (filterIdx < 0) {
+                    unrestricted = true;
+                } else {
+                    for (String filter : granted.substring(filterIdx + 1).split("&")) {
+                        String[] kv = filter.split("=", 2);
+                        if (kv.length == 2 && "category".equals(kv[0])) {
+                            allowedCategories.add(kv[1]);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (unrestricted || allowedCategories.isEmpty()) {
+            return; // kein granularer Filter -> alle Instanzen des Typs erlaubt
+        }
+
+        String[] requested = theRequestDetails.getParameters().get("category");
+        if (requested == null || requested.length == 0) {
+            // Suche transparent auf die erlaubten Kategorien einschraenken
+            Map<String, String[]> params = new HashMap<>(theRequestDetails.getParameters());
+            params.put("category", new String[]{String.join(",", allowedCategories)});
+            theRequestDetails.setParameters(params);
+            logger.info("Granular scope narrowing applied: category={}", String.join(",", allowedCategories));
+            return;
+        }
+        for (String value : requested) {
+            for (String single : value.split(",")) {
+                if (!allowedCategories.contains(single)) {
+                    throw new ForbiddenOperationException("Scope does not permit category '" + single + "'");
+                }
+            }
+        }
+    }
+
+    private String extractSubFromToken(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) {
+                return null;
+            }
+            JsonNode payload = new ObjectMapper().readTree(Base64.getUrlDecoder().decode(parts[1]));
+            return payload.path("sub").asText(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void handleTokenlessAccess(RequestDetails theRequestDetails, String resourceName) {
+        logger.info("Handling tokenless access for: {} (resource: {})",
+                   theRequestDetails.getRequestPath(), resourceName);
+        try {
+            String permissionTicket = requestPermissionTicket(theRequestDetails, resourceName);
             if (permissionTicket != null) {
                 respondWithPermissionTicket(theRequestDetails, permissionTicket);
                 // respondWithPermissionTicket throws AuthenticationException
@@ -202,9 +373,9 @@ public class UmaKeycloakAuthInterceptor {
         }
     }
 
-    private String requestPermissionTicket(RequestDetails theRequestDetails) {
+    private String requestPermissionTicket(RequestDetails theRequestDetails, String resourceName) {
         try {
-            PermissionRequest permissionRequest = buildPermissionRequest(theRequestDetails);
+            PermissionRequest permissionRequest = buildPermissionRequest(theRequestDetails, resourceName);
             logger.debug("Built permission request: resourceId={}, scopes={}",
                         permissionRequest.getResource_id(),
                         String.join(",", permissionRequest.getResource_scopes()));
@@ -258,28 +429,9 @@ public class UmaKeycloakAuthInterceptor {
         }
     }
 
-    private PermissionRequest buildPermissionRequest(RequestDetails theRequestDetails) {
-        String resourcePath = theRequestDetails.getRequestPath();
-        String httpMethod = theRequestDetails.getRequestType() != null ? theRequestDetails.getRequestType().name() : "GET";
-        String resourceType = extractResourceType(resourcePath);
-
-        // Use theRequestDetails.getId() for reliable resource ID extraction (same as handleRequest)
-        String resourceId = theRequestDetails.getId() != null
-            ? theRequestDetails.getId().getIdPart() : null;
-
-        // Use instance-level resource identifier if ID present, otherwise type-level
-        String resourceName;
-        if (resourceId != null) {
-            // Instance-level: use "Patient/XX" format (matches Keycloak UMA registration)
-            resourceName = resourceType + "/" + resourceId;
-            logger.info("PERMISSION REQUEST: Using INSTANCE-LEVEL resource: {}", resourceName);
-        } else {
-            // Type-level: use "PatientResource" format
-            resourceName = mapFhirResourceToKeycloakResource(resourceType);
-            logger.info("PERMISSION REQUEST: Using TYPE-LEVEL resource: {}", resourceName);
-        }
-
-        // Look up the resource UUID from Keycloak
+    private PermissionRequest buildPermissionRequest(RequestDetails theRequestDetails, String resourceName) {
+        // resourceName ist immer die Patient-Ressource (Patient/<id>), auch wenn die
+        // Anfrage eine klinische Ressource betrifft — Berechtigungen haengen am Patienten.
         // Keycloak's Protection API requires the UUID, not the name
         String resourceUuid = lookupResourceUuid(resourceName);
         if (resourceUuid == null) {
@@ -289,8 +441,6 @@ public class UmaKeycloakAuthInterceptor {
         }
 
         logger.info("Using resource UUID: {} for resource name: {}", resourceUuid, resourceName);
-        logger.debug("Building permission request - Path: {}, Resource: {}, ID: {}, Method: {}",
-                    resourcePath, resourceType, resourceId, httpMethod);
 
         // Send no scopes in the ticket request — Keycloak will include all scopes the user has
         return new PermissionRequest(resourceUuid, new String[0]);
@@ -369,12 +519,6 @@ public class UmaKeycloakAuthInterceptor {
         return null;
     }
 
-    private String mapFhirResourceToKeycloakResource(String fhirResourceType) {
-        // Type-level requests without ID fall back to resource name without instance
-        // In the new architecture only Patient/X is registered — type-level not supported
-        return fhirResourceType;
-    }
-
     private String extractResourceType(String path) {
         if (path == null) return "Unknown";
         
@@ -433,14 +577,30 @@ public class UmaKeycloakAuthInterceptor {
         return null;
     }
 
-    private String[] mapHttpMethodToScopes(String httpMethod) {
-        switch (httpMethod.toUpperCase()) {
-            case "GET": return new String[]{"patient/Patient.r"};
-            case "POST": return new String[]{"patient/Patient.c"};
-            case "PUT": return new String[]{"patient/Patient.u"};
-            case "DELETE": return new String[]{"patient/Patient.d"};
-            default: return new String[]{"patient/Patient.r"};
+    /**
+     * Stufe 2: benoetigter SMART-v2-Scope fuer den Zugriff.
+     * Instanz-Read braucht .r, Search .rs (von .rs abgedeckt), Update .u, Delete .d.
+     * $summary ist mit jedem lesenden patient/*-Scope auf dem Ziel-Patienten zugaenglich —
+     * die Section-Filterung uebernimmt der PatientSummaryProvider.
+     */
+    private String[] requiredScopesFor(RequestDetails theRequestDetails, String resourceType,
+                                       String httpMethod, boolean isSearch) {
+        if ("$summary".equals(theRequestDetails.getOperation())) {
+            return new String[]{
+                "patient/Patient.r",
+                "patient/Condition.r",
+                "patient/MedicationStatement.r",
+                "patient/AllergyIntolerance.r"
+            };
         }
+        String op;
+        switch (httpMethod.toUpperCase()) {
+            case "PUT": op = "u"; break;
+            case "DELETE": op = "d"; break;
+            case "POST": op = "c"; break;
+            default: op = isSearch ? "rs" : "r";
+        }
+        return new String[]{"patient/" + resourceType + "." + op};
     }
 
     private void respondWithPermissionTicket(RequestDetails theRequestDetails, String permissionTicket) {
@@ -522,45 +682,6 @@ public class UmaKeycloakAuthInterceptor {
             return hasAuth;
         } catch (Exception e) {
             logger.warn("Could not check token permissions: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    private boolean isTokenValid(String token) {
-        logger.info("Starting token introspection for token: {}...", token.substring(0, Math.min(50, token.length())));
-        try (CloseableHttpClient client = HttpClients.createDefault()) {
-            HttpPost post = new HttpPost(INTROSPECTION_URL);
-            post.setHeader("Content-Type", "application/x-www-form-urlencoded");
-            String body = "client_id=" + CLIENT_ID + "&client_secret=" + CLIENT_SECRET + "&token=" + token;
-            post.setEntity(new StringEntity(body));
-
-            logger.info("Sending introspection request to: {}", INTROSPECTION_URL);
-
-            try (CloseableHttpResponse response = client.execute(post)) {
-                String responseBody = EntityUtils.toString(response.getEntity());
-                int statusCode = response.getStatusLine().getStatusCode();
-
-                logger.info("Introspection response - Status: {}, Body: {}", statusCode, responseBody);
-
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode jsonNode = mapper.readTree(responseBody);
-
-                if (!jsonNode.has("active")) {
-                    logger.error("Introspection response missing 'active' field");
-                    return false;
-                }
-
-                boolean isActive = jsonNode.get("active").asBoolean();
-
-                if (isActive) {
-                    logger.info("Token introspection successful - token is active");
-                } else {
-                    logger.warn("Token introspection indicates token is not active");
-                }
-                return isActive;
-            }
-        } catch (IOException e) {
-            logger.error("Error during token introspection", e);
             return false;
         }
     }
@@ -720,6 +841,11 @@ public class UmaKeycloakAuthInterceptor {
      * patient/Patient.r, but patient/Condition.rs does NOT cover patient/Patient.r).
      */
     private boolean scopeCovers(String grantedScope, String requiredScope) {
+        // granulare Filter (z.B. ?category=...) beschraenken Instanzen, nicht den Typ-Zugriff
+        int filterIdx = grantedScope.indexOf('?');
+        if (filterIdx >= 0) {
+            grantedScope = grantedScope.substring(0, filterIdx);
+        }
         int grantedDot = grantedScope.lastIndexOf('.');
         int requiredDot = requiredScope.lastIndexOf('.');
         if (grantedDot < 0 || requiredDot < 0) {
