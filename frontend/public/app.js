@@ -2,6 +2,10 @@
 
 const $ = (sel) => document.querySelector(sel);
 
+// Aktueller Patientenkontext (vom Login/Selektor gesetzt)
+let currentPatientId = null;
+let patientList = [];
+
 // ---------- Auth ----------
 async function login(username, password) {
   const res = await fetch('/api/login', {
@@ -23,6 +27,34 @@ function showApp(me) {
   $('#roles').innerHTML = me.roles
     .map((r) => `<span class="badge badge-${r}">${r}</span>`)
     .join('');
+  setupPatientContext(me);
+}
+
+// Richtet den Patientenkontext ein: Patient-User bekommen fix ihren eigenen
+// Patienten (kein Selektor), Aerzte/Admin eine Auswahlliste.
+function setupPatientContext(me) {
+  patientList = me.patients || [];
+  const wrap = $('#patient-select-wrap');
+  const select = $('#patient-select');
+  const isPatient = me.roles.includes('Patient') && !me.roles.includes('Doctor');
+
+  if (isPatient || patientList.length <= 1) {
+    wrap.classList.add('hidden');
+    currentPatientId = me.patientId || (patientList[0] && patientList[0].id) || null;
+  } else {
+    wrap.classList.remove('hidden');
+    select.innerHTML = patientList
+      .map((p) => `<option value="${p.id}">${p.label}</option>`)
+      .join('');
+    currentPatientId = patientList[0] ? patientList[0].id : null;
+    select.value = currentPatientId;
+  }
+  updatePatientHeading();
+}
+
+function updatePatientHeading() {
+  const entry = patientList.find((p) => p.id === currentPatientId);
+  $('#patient-heading').textContent = entry ? entry.label : (currentPatientId ? `Patient/${currentPatientId}` : 'Kein Patient');
 }
 
 function showLogin() {
@@ -79,7 +111,7 @@ function renderResource(label, data) {
       || data.resource?.issue?.[0]?.diagnostics
       || 'Die Patientenfreigabe deckt diese Ressource für deine Rolle nicht ab.';
     body = `<div class="denied-box"><strong>Kein Zugriff.</strong><br/>${msg}</div>`;
-  } else if (label.includes('$summary')) {
+  } else if (data.resource?.resourceType === 'Bundle' && data.resource?.type === 'document') {
     body = renderSummary(data.resource);
   } else if (data.resource?.resourceType === 'Bundle') {
     body = renderBundle(data.resource);
@@ -206,9 +238,18 @@ $('#logout').addEventListener('click', async () => {
   showLogin();
 });
 
+$('#patient-select').addEventListener('change', (e) => {
+  currentPatientId = e.target.value;
+  updatePatientHeading();
+});
+
 document.querySelectorAll('.action').forEach((btn) => {
   btn.addEventListener('click', async () => {
-    const path = btn.dataset.path;
+    if (!currentPatientId) {
+      $('#result-panel').innerHTML = '<div class="denied-box">Kein Patient ausgewählt.</div>';
+      return;
+    }
+    const path = btn.dataset.tmpl.replace('{id}', currentPatientId);
     const label = btn.dataset.label;
     $('#result-panel').innerHTML = '<div class="placeholder">Lade…</div>';
     renderFlow([]);

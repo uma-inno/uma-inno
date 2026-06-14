@@ -44,13 +44,16 @@
 
     <main class="layout">
       <aside class="sidebar">
-        <h2>Patient&nbsp;1 &middot; Alice Anderson</h2>
+        <label id="patient-select-wrap" class="patient-select hidden">Patient auswählen
+          <select id="patient-select"></select>
+        </label>
+        <h2 id="patient-heading">Patient</h2>
         <p class="hint">Wähle eine Aktion. Das Ergebnis zeigt den UMA-Flow und die Durchsetzung.</p>
-        <button class="action" data-path="Patient/1" data-label="Patientendaten lesen">👤 Patientendaten</button>
-        <button class="action" data-path="Condition?patient=1" data-label="Diagnosen (Conditions)">🩺 Diagnosen</button>
-        <button class="action" data-path="MedicationStatement?patient=1" data-label="Medikation">💊 Medikation</button>
-        <button class="action" data-path="AllergyIntolerance?patient=1" data-label="Allergien">⚠️ Allergien</button>
-        <button class="action action-summary" data-path="Patient/1/$summary" data-label="IPS Patient Summary">📄 $summary (IPS)</button>
+        <button class="action" data-tmpl="Patient/{id}" data-label="Patientendaten lesen">👤 Patientendaten</button>
+        <button class="action" data-tmpl="Condition?patient={id}" data-label="Diagnosen (Conditions)">🩺 Diagnosen</button>
+        <button class="action" data-tmpl="MedicationStatement?patient={id}" data-label="Medikation">💊 Medikation</button>
+        <button class="action" data-tmpl="AllergyIntolerance?patient={id}" data-label="Allergien">⚠️ Allergien</button>
+        <button class="action action-summary" data-tmpl="Patient/{id}/$summary" data-label="IPS Patient Summary">📄 $summary (IPS)</button>
       </aside>
 
       <section class="content">

@@ -19,6 +19,8 @@ const REALM = 'FHIR-Auth';
 const CLIENT_ID = 'fhir-client';
 const CLIENT_SECRET = process.env.CLIENT_SECRET || 'QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP';
 const TOKEN_URL = `${KEYCLOAK}/realms/${REALM}/protocol/openid-connect/token`;
+const MASTER_TOKEN_URL = `${KEYCLOAK}/realms/master/protocol/openid-connect/token`;
+const ADMIN_BASE = `${KEYCLOAK}/admin/realms/${REALM}`;
 const UMA_GRANT = 'urn:ietf:params:oauth:grant-type:uma-ticket';
 
 const app = express();
@@ -36,6 +38,49 @@ function decodeJwt(token) {
   } catch {
     return {};
   }
+}
+
+// Holt ein Keycloak-Admin-Token (admin-cli, master-Realm).
+async function getAdminToken() {
+  const body = new URLSearchParams({
+    grant_type: 'password',
+    client_id: 'admin-cli',
+    username: 'admin',
+    password: 'admin',
+  });
+  const r = await fetch(MASTER_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!r.ok) return null;
+  return (await r.json()).access_token;
+}
+
+// Liest alle in Keycloak registrierten Patient-Ressourcen (name "Patient/<id>")
+// inkl. ihres Owners aus. Quelle der Wahrheit fuer die User->Patient-Verknuepfung.
+// Liefert [{ id, ownerId, ownerName }]. (Die FHIR-Patient-Suche ist UMA-gesperrt,
+// daher kommen Liste und Eigentuemer aus der Authorization-Konfiguration.)
+let clientUuidCache = null;
+async function listKeycloakPatients(adminToken) {
+  if (!clientUuidCache) {
+    const cr = await fetch(`${ADMIN_BASE}/clients?clientId=${CLIENT_ID}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    clientUuidCache = (await cr.json())[0].id;
+  }
+  const rr = await fetch(
+    `${ADMIN_BASE}/clients/${clientUuidCache}/authz/resource-server/resource?first=0&max=200&deep=true`,
+    { headers: { Authorization: `Bearer ${adminToken}` } }
+  );
+  const resources = await rr.json();
+  return resources
+    .filter((r) => /^Patient\/\d+$/.test(r.name))
+    .map((r) => ({
+      id: r.name.replace('Patient/', ''),
+      ownerId: r.owner?.id || null,
+      ownerName: r.owner?.name || null,
+    }));
 }
 
 // --- Login: Password Grant gegen Keycloak ---
@@ -68,11 +113,53 @@ app.post('/api/login', async (req, res) => {
       (role) => ['Doctor', 'Patient', 'Administrator'].includes(role)
     );
     req.session.rptCache = {};
-    res.json({ username: req.session.username, roles: req.session.roles });
+
+    await resolvePatientContext(req.session, claims.sub);
+    res.json({
+      username: req.session.username,
+      roles: req.session.roles,
+      patientId: req.session.patientId,
+      patients: req.session.patients,
+    });
   } catch (e) {
     res.status(502).json({ error: 'Keycloak nicht erreichbar: ' + e.message });
   }
 });
+
+// Bestimmt den Patientenkontext nach dem Login (Quelle: Keycloak-Authorization-Config):
+//  - Patient-User: der Patient, dessen Owner die eigene Keycloak-UUID (sub) ist.
+//    patientId gesetzt, patients enthaelt nur den eigenen Patienten.
+//  - Aerzte/Admin: kein eigener Patient (patientId = null); patients = alle Patienten
+//    zur Auswahl. Welche davon zugaenglich sind, entscheidet erst die UMA-Durchsetzung.
+async function resolvePatientContext(session, sub) {
+  session.patientId = null;
+  session.patients = [];
+  const isPatient = session.roles.includes('Patient') && !session.roles.includes('Doctor');
+  try {
+    const adminToken = await getAdminToken();
+    if (!adminToken) {
+      console.warn('Patientenkontext: kein Admin-Token');
+      return;
+    }
+    const all = await listKeycloakPatients(adminToken);
+    const toEntry = (p) => ({ id: p.id, label: `${p.ownerName || 'Patient'} (Patient/${p.id})` });
+
+    if (isPatient) {
+      const own = all.find((p) => p.ownerId === sub);
+      if (own) {
+        session.patientId = own.id;
+        session.patients = [toEntry(own)];
+      }
+    } else {
+      // numerisch sortiert fuer stabile Reihenfolge
+      session.patients = all
+        .sort((a, b) => Number(a.id) - Number(b.id))
+        .map(toEntry);
+    }
+  } catch (e) {
+    console.warn('Patientenkontext konnte nicht aufgeloest werden:', e.message);
+  }
+}
 
 app.post('/api/logout', (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
@@ -80,7 +167,12 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
   if (!req.session.accessToken) return res.status(401).json({ error: 'nicht angemeldet' });
-  res.json({ username: req.session.username, roles: req.session.roles });
+  res.json({
+    username: req.session.username,
+    roles: req.session.roles,
+    patientId: req.session.patientId,
+    patients: req.session.patients,
+  });
 });
 
 // Tauscht ein Permission Ticket gegen ein RPT (mit Cache pro Ticket-Resource).
@@ -102,12 +194,48 @@ async function exchangeTicket(session, ticket) {
   return json.access_token;
 }
 
-// Fuehrt eine FHIR-Anfrage inkl. vollem UMA-Flow aus.
+// Einzelner HTTP-Aufruf gegen den FHIR-Server (optional mit RPT statt Access Token).
 async function fhirRequest(session, method, fhirPath, rpt) {
   const headers = { Accept: 'application/fhir+json' };
   if (rpt) headers.Authorization = `Bearer ${rpt}`;
   else if (session.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
   return fetch(`${FHIR_BASE}/${fhirPath}`, { method, headers });
+}
+
+// Fuehrt eine GET-FHIR-Anfrage inkl. vollem UMA-Flow aus und liefert
+// { status, steps, payload }. Wird vom Proxy-Endpoint UND von der
+// Login-Patientenaufloesung verwendet.
+async function umaFetch(session, fhirPath) {
+  const steps = [];
+  // Schritt 1: Versuch mit dem Access Token (loest 401 + Permission Ticket aus)
+  let response = await fhirRequest(session, 'GET', fhirPath, null);
+  steps.push({ step: 'Access Token', status: response.status });
+
+  if (response.status === 401) {
+    const wwwAuth = response.headers.get('www-authenticate') || '';
+    const ticketMatch = wwwAuth.match(/ticket="([^"]+)"/);
+    if (ticketMatch) {
+      steps.push({ step: 'Permission Ticket erhalten', status: 401 });
+      const rpt = await exchangeTicket(session, ticketMatch[1]);
+      if (!rpt) {
+        steps.push({ step: 'RPT-Austausch', status: 'access_denied' });
+        return { status: 403, steps, payload: { error: 'Keycloak verweigert RPT (access_denied)' } };
+      }
+      const rptClaims = decodeJwt(rpt);
+      const rptScopes = (rptClaims.authorization?.permissions || [])
+        .flatMap((p) => (p.scopes || []).map((s) => `${p.rsname}: ${s}`));
+      steps.push({ step: 'RPT erhalten', status: 200, scopes: rptScopes });
+
+      // Schritt 4: erneuter Zugriff mit RPT
+      response = await fhirRequest(session, 'GET', fhirPath, rpt);
+      steps.push({ step: 'Zugriff mit RPT', status: response.status });
+    }
+  }
+
+  const text = await response.text();
+  let payload;
+  try { payload = JSON.parse(text); } catch { payload = text; }
+  return { status: response.status, steps, payload };
 }
 
 // --- Generischer FHIR-Proxy mit UMA-Dance ---
@@ -116,39 +244,11 @@ app.get('/api/fhir/*', async (req, res) => {
   if (!req.session.accessToken) return res.status(401).json({ error: 'nicht angemeldet' });
 
   const fhirPath = req.params[0] + (req._parsedUrl.search || '');
-  const steps = [];
   try {
-    // Schritt 1: Versuch mit dem Access Token (loest 401 + Permission Ticket aus)
-    let response = await fhirRequest(req.session, 'GET', fhirPath, null);
-    steps.push({ step: 'Access Token', status: response.status });
-
-    if (response.status === 401) {
-      const wwwAuth = response.headers.get('www-authenticate') || '';
-      const ticketMatch = wwwAuth.match(/ticket="([^"]+)"/);
-      if (ticketMatch) {
-        steps.push({ step: 'Permission Ticket erhalten', status: 401 });
-        const rpt = await exchangeTicket(req.session, ticketMatch[1]);
-        if (!rpt) {
-          steps.push({ step: 'RPT-Austausch', status: 'access_denied' });
-          return res.status(403).json({ error: 'Keycloak verweigert RPT (access_denied)', steps });
-        }
-        const rptClaims = decodeJwt(rpt);
-        const rptScopes = (rptClaims.authorization?.permissions || [])
-          .flatMap((p) => (p.scopes || []).map((s) => `${p.rsname}: ${s}`));
-        steps.push({ step: 'RPT erhalten', status: 200, scopes: rptScopes });
-
-        // Schritt 4: erneuter Zugriff mit RPT
-        response = await fhirRequest(req.session, 'GET', fhirPath, rpt);
-        steps.push({ step: 'Zugriff mit RPT', status: response.status });
-      }
-    }
-
-    const text = await response.text();
-    let payload;
-    try { payload = JSON.parse(text); } catch { payload = text; }
-    res.status(response.status).json({ status: response.status, steps, resource: payload });
+    const result = await umaFetch(req.session, fhirPath);
+    res.status(result.status).json({ status: result.status, steps: result.steps, resource: result.payload });
   } catch (e) {
-    res.status(502).json({ error: 'FHIR-Server nicht erreichbar: ' + e.message, steps });
+    res.status(502).json({ error: 'FHIR-Server nicht erreichbar: ' + e.message, steps: [] });
   }
 });
 
