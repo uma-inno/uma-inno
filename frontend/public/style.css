@@ -127,6 +127,23 @@ input:focus { outline: none; border-color: var(--primary); }
   border-radius: 12px;
   padding: 1.25rem;
 }
+.patient-select {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+}
+.patient-select select {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.patient-select select:focus { outline: none; border-color: var(--primary); }
 .sidebar h2 { font-size: 1rem; margin-bottom: 0.5rem; }
 .hint { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 1rem; }
 .action {
