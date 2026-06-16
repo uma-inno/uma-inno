@@ -1,14 +1,17 @@
-# $summary Operation (Not Implemented)
+# $summary Operation
 
 ## Overview
 
-The `$summary` operation generates an **International Patient Summary (IPS)** - a standardized FHIR document containing a patient's essential healthcare information.
+The `$summary` operation generates an **International Patient Summary (IPS)** — a standardized
+FHIR `document` Bundle containing a patient's essential healthcare information.
 
-**Status:** Not implemented (IPS is disabled in `application.yaml`)
+**Status:** Implemented in `providers/PatientSummaryProvider.java` (registered via
+`hapi.fhir.custom-provider-classes`). It is a custom provider and does not depend on HAPI's
+built-in IPS module.
 
 ---
 
-## How It Would Work
+## How It Works
 
 ### Endpoint
 ```
@@ -17,21 +20,25 @@ GET /fhir/Patient/[id]/$summary
 
 ### Request Example
 ```http
-GET /fhir/Patient/123/$summary
-Authorization: Bearer <token>
+GET /fhir/Patient/1/$summary
+Authorization: Bearer <RPT>
 ```
 
+Access is gated by the UMA interceptor: the RPT must carry at least one read scope for the target
+patient (`patient/Patient.r`, `patient/Condition.r`, `patient/MedicationStatement.r` or
+`patient/AllergyIntolerance.r`).
+
 ### Response
-Returns a FHIR **Bundle** of type `document` containing:
+A FHIR `Bundle` of type `document` containing a `Composition` (LOINC `60591-5`, "Patient summary
+Document"), the `Patient`, and the permitted clinical resources grouped into sections:
 
-| Section | FHIR Resource | Description |
-|---------|---------------|-------------|
-| Patient | Patient | Demographics |
-| Allergies | AllergyIntolerance | Known allergies |
-| Medications | MedicationStatement | Current medications |
-| Problems | Condition | Active medical conditions |
+| Section | LOINC | FHIR Resource |
+|---------|-------|---------------|
+| Problems | `11450-4` | Condition |
+| Allergies and Intolerances | `48765-2` | AllergyIntolerance |
+| Medication Summary | `10160-0` | MedicationStatement |
 
-### Response Example (Simplified)
+### Response Example (simplified)
 ```json
 {
   "resourceType": "Bundle",
@@ -40,18 +47,17 @@ Returns a FHIR **Bundle** of type `document` containing:
     {
       "resource": {
         "resourceType": "Composition",
-        "title": "Patient Summary",
+        "type": { "coding": [{ "system": "http://loinc.org", "code": "60591-5" }] },
+        "title": "International Patient Summary",
         "section": [
-          { "title": "Allergies", "entry": [...] },
-          { "title": "Medications", "entry": [...] },
-          { "title": "Problems", "entry": [...] }
+          { "title": "Problems", "entry": [...] },
+          { "title": "Medication Summary", "entry": [...] }
         ]
       }
     },
     { "resource": { "resourceType": "Patient", ... } },
-    { "resource": { "resourceType": "AllergyIntolerance", ... } },
-    { "resource": { "resourceType": "MedicationStatement", ... } },
-    { "resource": { "resourceType": "Condition", ... } }
+    { "resource": { "resourceType": "Condition", ... } },
+    { "resource": { "resourceType": "MedicationStatement", ... } }
   ]
 }
 ```
@@ -60,36 +66,36 @@ Returns a FHIR **Bundle** of type `document` containing:
 
 ## UMA-Aware Behavior
 
-The `$summary` operation should be **permission-filtered**: it only includes resources the requesting user has permission to access.
+The summary is **permission-filtered**, reusing the same enforcement stages as the interceptor:
 
-### Example Scenario
+- **Stage 2 (section scope):** a clinical section is included only if the RPT carries a read scope
+  for that type (e.g. Problems needs `patient/Condition.r`/`.rs`). Sections without a scope are
+  omitted entirely. The `Composition` and `Patient` are always present (the operation already
+  required a read scope to be reached).
+- **Stage 3 (granular categories):** if a scope carries a `?category=` filter, the section's search
+  is narrowed to those categories.
+- **Stage 4 (blacklist):** individual instances revoked by the patient are filtered out; a section
+  left empty gets an `emptyReason` of `unavailable`.
 
-**Alice's data:**
-- Patient/1 (owned by Alice)
-- Condition/3 (diabetes)
-- AllergyIntolerance/4 (penicillin)
-- MedicationStatement/8 (insulin)
+### Example Scenario (demo data)
 
-**Dr. Smith's permissions:**
-- `read` on Patient/1 ✅
-- `read` on Condition/3 ✅
-- No permission on AllergyIntolerance/4 ❌
-- No permission on MedicationStatement/8 ❌
+**Alice's data (Patient/1):** Conditions (Hypertension, Diabetes, Migraine), MedicationStatement
+(Metformin), AllergyIntolerance (Penicillin).
 
-### Expected Behavior
+| Requester | Scopes on Patient/1 | `$summary` result |
+|-----------|---------------------|-------------------|
+| **alice** (owner) | all 5 | Composition + Patient + Problems + Allergies + Medications |
+| **dr.smith** | `patient/Patient.r` | Composition + Patient demographics only (no clinical sections) |
+| **dr.bob** | `patient/Condition.rs` | Composition + Patient + Problems (Conditions) only |
+| **dr.bob** on Patient/7 | _none_ | `403` (no read scope → ticket/RPT denied) |
 
-| Requester | `$summary` Result |
-|-----------|-------------------|
-| **Alice** (owner) | Full summary: Patient, Condition, Allergy, Medication |
-| **Dr. Smith** | Partial summary: Patient, Condition only |
-| **Dr. Bob** (no permissions) | Access denied (403) or empty summary |
+This ensures patients keep control over which parts of their medical record each provider can see.
 
-### Implementation Approach
+---
 
-1. Intercept `$summary` request
-2. Get all resources that would be included in the summary
-3. For each resource, check if user has `read` permission in Keycloak
-4. Filter out resources without permission
-5. Return summary containing only permitted resources
+## Extending the Summary
 
-This ensures patients maintain control over which parts of their medical record each provider can see.
+`PatientSummaryProvider` keeps the sections in a `SECTIONS` table (`SectionSpec`: title, LOINC,
+FHIR type). Further IPS sections (e.g. Immunizations `11369-6`, Results `30954-2`, Procedures
+`47519-4`) can be added there once the corresponding resource types are UMA-protected and have
+their own scopes.

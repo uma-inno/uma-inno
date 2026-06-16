@@ -16,6 +16,14 @@ auf einer frischen Maschine eingerichtet wird, inkl. Keycloak-Realm und Demo-Dat
 - Freie Ports: `8080` (Keycloak), `8081` (HAPI FHIR), `3000` (Frontend),
   `5432`/`5433` (PostgreSQL)
 
+> **Keycloak-Version (wichtig):** Das Compose pinnt das Image bewusst auf
+> `quay.io/keycloak/keycloak:26.6.3`. Der Realm-Export (`fhir-auth-realm-export.json`)
+> wurde mit dieser Version erzeugt (`"keycloakVersion": "26.6.3"`). Eine **ältere**
+> Keycloak-Version bricht den Import mit `Unrecognized field "..."` ab (z.B.
+> `scimApiEnabled`, `maxSecondaryAuthFailures`). Wird die Version angehoben, den Image-Tag
+> an die `keycloakVersion` im Export anpassen — **nicht** `:latest` verwenden, da der
+> `latest`-Stand älter als der Export sein kann.
+
 ---
 
 ## 2. Stack starten
@@ -37,93 +45,124 @@ Das startet fünf Container:
 | Frontend | `uma-frontend` | 3000 | — |
 
 Keycloak importiert beim ersten Start automatisch den Realm aus dem gemounteten Ordner
-`keycloak-config/keycloak-files/` (`--import-realm`). Dort liegt genau eine Realm-Datei,
-`fhir-auth-realm-export.json`, mit dem vollständigen Stand (SMART-v2-Scopes, alle Patienten,
-Permissions, Decision Strategy AFFIRMATIVE). Der Realm ist damit nach dem Start **sofort
-vollständig** — Schritt 3 ist nur ein Fallback und kann normalerweise übersprungen werden.
+`keycloak-config/keycloak-files/`. Dort darf **genau eine** Realm-Datei liegen
+(`fhir-auth-realm-export.json`); `--import-realm` würde sonst mehrere Realms importieren und
+es käme zu Konflikten.
 
-> Lege keine zweite Realm-Datei in diesen Ordner: `--import-realm` würde sonst beide
-> importieren und es käme zu Konflikten.
+> **Was der Import enthält — und was nicht:** Der Export liefert den Grund-Realm: Users
+> (alice, bernd, clara, dr.bob, dr.smith, jan), Rollen, den Client `fhir-client` (Secret,
+> `uma_protection`), die 5 SMART-v2-Scopes, die Role-/User-Policies und Decision Strategy
+> AFFIRMATIVE. Er enthält **bewusst KEINE** Patient-Ressourcen und **keine** scope-Permissions
+> — diese referenzieren user-owned UMA-Ressourcen, die sich über den Realm-Import nicht
+> zuverlässig wiederherstellen lassen (Keycloak: *"Resource [Patient/1] … not owned by the
+> resource server"*). Sie entstehen stattdessen zur Laufzeit in Schritt 4. Die Schritte 3+4
+> sind daher **Pflicht**, kein optionaler Fallback.
 
-Warten bis Keycloak bereit ist:
+---
+
+## 3. Auf Bereitschaft warten
 
 ```bash
-# Realm erreichbar?
+# Keycloak-Realm erreichbar?
 curl -s http://localhost:8080/realms/FHIR-Auth/.well-known/uma2-configuration
 # HAPI erreichbar? (kann 1-2 Minuten dauern)
 curl -s http://localhost:8081/fhir/metadata
 ```
 
+> **Wichtig — Reihenfolge HAPI ↔ Keycloak:** HAPI baut beim Start seinen Keycloak-Admin-Client
+> auf (um Patient-Ressourcen registrieren zu können). `depends_on` wartet nur darauf, dass der
+> Keycloak-**Container** läuft, **nicht** darauf, dass Keycloak den Realm fertig importiert hat
+> und bereit ist. Startet HAPI, bevor Keycloak antwortet, bleibt der Client uninitialisiert und
+> das spätere Seeden registriert die Patienten **nicht** (HAPI-Log:
+> `Failed to register resource Patient/1: … templateValues entry was null`).
+>
+> **Workaround:** Sobald Keycloak antwortet (`uma2-configuration` liefert 200), HAPI einmal
+> neu starten, **bevor** geseedet wird:
+> ```bash
+> docker compose restart hapi-fhir-jpaserver-start
+> ```
+> Erfolg prüfen:
+> ```bash
+> docker logs hapi-fhir-jpaserver-start | grep "KeycloakResourceService initialized successfully"
+> ```
+
 ---
 
-## 3. (Fallback) Konfiguration per Skript aufbauen
+## 4. Demo-Daten + Autorisierung aufbauen (Pflicht)
 
-Nur nötig, wenn der Realm **ohne** die fertige Konfiguration importiert wurde (z.B. ein
-nackter Realm ohne Authorization-Settings). Dieses Skript baut die SMART-v2-Konfiguration
-idempotent nach (User bernd/clara, SMART-Scopes, Policies, Permissions, Decision Strategy):
+Die HAPI-Datenbank startet **leer**. Diese beiden Skripte legen die Patienten an und bauen die
+Permissions auf den dabei registrierten Ressourcen auf:
 
 ```powershell
 cd keycloak-config
-.\setup-smart-v2-authz.ps1
+.\seed-fhir-data.ps1          # Patienten alice/bernd/clara + klinische Ressourcen
+.\setup-smart-v2-authz.ps1    # scope-Permissions auf die nun registrierten Patient/<id>
 ```
 
-Beim normalen Setup mit `fhir-auth-realm-export.json` ist dieser Schritt **nicht** nötig.
+`seed-fhir-data.ps1` legt die drei Patienten (Alice → Patient/1, Bernd → Patient/7,
+Clara → Patient/11) und ihre klinischen Ressourcen per FHIR-POST an. Die FHIR-IDs 1/7/11
+ergeben sich aus der Anlagereihenfolge auf einer leeren DB. Jeder neue Patient wird vom
+`ResourceRegistrationInterceptor` automatisch als UMA-Ressource in Keycloak registriert
+(Owner = Keycloak-UUID des Patienten, zur Laufzeit aufgelöst — nicht hartkodiert).
 
----
+`setup-smart-v2-authz.ps1` ist idempotent und legt auf den registrierten Patient-Ressourcen die
+scope-Permissions an (Owner-Vollzugriff + die Arzt-Freigaben gemäß Demo-Szenario), setzt
+`uma_protection` als Default-Scope und Decision Strategy AFFIRMATIVE. Mit `-CleanupLegacy`
+entfernt es zusätzlich Altobjekte aus früheren Importen.
 
-## 4. Demo-FHIR-Daten anlegen (Seed)
-
-Die HAPI-Datenbank startet **leer**. Dieses Skript legt die drei Patienten (Alice, Bernd,
-Clara) und ihre klinischen Ressourcen an. Es löst die Keycloak-UUIDs **zur Laufzeit** auf,
-damit der `keycloak-uuid`-Identifier jedes Patienten zum echten User passt:
-
-```powershell
-cd keycloak-config
-.\seed-fhir-data.ps1
-```
-
-Anschließend die Permissions auf die nun real registrierten Patient-Ressourcen legen:
-
-```powershell
-.\setup-smart-v2-authz.ps1
-```
-
-> **Reihenfolge-Logik:** `setup-smart-v2-authz.ps1` verarbeitet nur Patient-Ressourcen,
-> die in Keycloak bereits registriert sind. Diese entstehen erst beim Anlegen der
-> Patienten in HAPI (`seed-fhir-data.ps1`), da der `ResourceRegistrationInterceptor`
-> jeden neuen Patienten automatisch als UMA-Ressource registriert. Deshalb: **seed →
-> setup** (oder setup → seed → setup, wenn auch die User erst angelegt werden müssen).
-
-> **Owner-Registrierung — bekannte Stolperfalle:** Die automatische Registrierung durch
-> HAPI kann mit HTTP 500 fehlschlagen (`Owner must be a valid username or user
-> identifier`), wenn der `keycloak-uuid` eines Patienten nicht zu einem existierenden
-> Keycloak-User passt. Beim Import des **fertigen Exports** tritt das nicht auf, weil die
-> UUIDs fixiert sind. Falls doch: betroffene Patient-Ressource per Admin-API mit korrekter
-> Owner-UUID neu registrieren (siehe `setup-smart-v2-authz.ps1`, Abschnitt Permissions).
+> **Reihenfolge seed → setup:** `setup-smart-v2-authz.ps1` verarbeitet nur Patient-Ressourcen,
+> die bereits in Keycloak registriert sind — die entstehen erst beim Seeden. Läuft setup vor dem
+> Seed, meldet es „Noch keine Patient/<id>-Ressourcen registriert" und legt keine Permissions an.
+> (Die Patienten-User bernd/clara sind im Export bereits enthalten; das Skript legt sie nur an,
+> falls sie fehlen.)
 
 ---
 
 ## 5. Verifikation
 
-```powershell
-cd keycloak-config
-.\test-uma-flow.ps1 -Username dr.smith -Password smith123 -ResourcePath Patient/1   # 200
-.\test-uma-flow.ps1 -Username dr.bob   -Password bob123   -ResourcePath Patient/1   # 401 (kein Patient-Scope)
-.\test-uma-flow.ps1 -Username alice    -Password alice123 -ResourcePath Patient/1   # 200
+> Hinweis: Das in früheren Ständen erwähnte `test-uma-flow.ps1` ist auf diesem Branch nicht mehr
+> vorhanden. Der volle UMA-Flow lässt sich am einfachsten über den **Frontend-Proxy** prüfen, der
+> den UMA-Dance (Access Token → 401 + Permission Ticket → RPT → Zugriff) serverseitig durchführt.
+
+```bash
+# Login (Session-Cookie -> cj.txt), danach FHIR-Zugriff über den Proxy:
+curl -s -c cj.txt -X POST http://localhost:3000/api/login \
+  -H "Content-Type: application/json" -d '{"username":"dr.smith","password":"smith123"}'
+curl -s -b cj.txt -o NUL -w "%{http_code}\n" http://localhost:3000/api/fhir/Patient/1   # -> 200
 ```
 
-Oder im Browser: **http://localhost:3000**
-- `alice` / `alice123` (Patient) → sieht eigene Daten (Patient/1) vollständig
-- `bernd` / `bernd123` (Patient) → sieht eigene Daten (Patient/7)
-- `clara` / `clara123` (Patient) → sieht eigene Daten (Patient/11)
-- `dr.smith` / `smith123` (Arzt) → darf Patient/1 lesen (auf Alices TrustList)
-- `dr.bob` / `bob123` (Arzt) → darf nur Conditions von Patient/1, nicht die Stammdaten
+Erwartete Ergebnisse:
+
+| User | Pfad | Status | Grund |
+|---|---|---|---|
+| dr.smith | `Patient/1` | **200** | TrustList von Alice + `patient/Patient.r` |
+| dr.bob | `Patient/1` | **401** | nur `Condition.rs` → kein Stammdaten-Lesen |
+| dr.bob | `Condition?patient=1` | **200** | darf Alices Conditions lesen |
+| dr.bob | `Patient/7` | **403** | keine TrustList bei bernd → `access_denied` |
+| alice | `Patient/1` | **200** | Owner, Vollzugriff |
+| bernd | `Patient/7` | **200** | Owner von Patient/7 |
+| bernd | `Patient/1` | **403** | kein Zugriff auf fremden Patienten |
+| clara | `Patient/11` | **200** | Owner von Patient/11 |
+
+Oder im Browser: **http://localhost:3000** — Login als alice/bernd/clara (Patient) oder
+dr.smith/dr.bob (Arzt). Die UMA-Schritte und die RPT-Scopes werden in der UI sichtbar.
 
 ---
 
-## 6. Realm neu exportieren (nach Konfigurationsänderungen)
+## 6. Bekannte Probleme & Lösungen
 
-Wenn die Keycloak-Konfiguration geändert wurde und der Export aktualisiert werden soll:
+| Problem | Ursache | Lösung |
+|---|---|---|
+| Keycloak-Crashloop, `Unrecognized field "..."` beim Import | Image-Version älter als die `keycloakVersion` im Export | Image-Tag an den Export anpassen (aktuell `26.6.3`), **nicht** `:latest` |
+| Keycloak-Crashloop, `Resource … [Patient/1] … not owned by the resource server` | user-owned UMA-Ressourcen + scope-Permissions im Realm-Export sind nicht re-importierbar | aus dem Export entfernen, zur Laufzeit über seed + `setup-smart-v2-authz.ps1` aufbauen (die mitgelieferte Datei ist bereits so zugeschnitten) |
+| Seed registriert keine Patienten, HAPI-Log `templateValues entry was null` | HAPI startete, bevor Keycloak bereit war → Keycloak-Client uninitialisiert | HAPI nach Keycloak-Bereitschaft neu starten, **dann** seeden (siehe Schritt 3) |
+| `setup-smart-v2-authz.ps1`: „Noch keine Patient/<id>-Ressourcen registriert" | Seed noch nicht gelaufen | zuerst `seed-fhir-data.ps1`, dann setup erneut |
+| Mehrere Realm-Dateien im Import-Ordner | `--import-realm` importiert alle JSONs → Konflikt/falscher Realm gewinnt | nur `fhir-auth-realm-export.json` im Ordner lassen |
+| `access_denied: request_submitted` | `ownerManagedAccess=true` auf der Ressource | per Admin-API auf `false` setzen (macht `setup-smart-v2-authz.ps1`) |
+
+---
+
+## 7. Realm neu exportieren (nach Konfigurationsänderungen)
 
 ```bash
 docker exec keycloak-uma /opt/keycloak/bin/kc.sh export \
@@ -132,13 +171,17 @@ docker cp keycloak-uma:/tmp/realm-export/FHIR-Auth-realm.json \
   ./keycloak-config/keycloak-files/fhir-auth-realm-export.json
 ```
 
-> Der Export schlägt fehl, wenn eine **script-basierte Policy** (`script-owner-policy.js`)
-> im Realm existiert (`providerFactory is null`). Diese ist eine Altlast und wird nicht
-> mehr benötigt — vorher entfernen.
+> **Achtung — vor dem Wiederverwenden als Import-Datei aufräumen:** Ein frischer Export enthält
+> die zur Laufzeit angelegten **user-owned Patient-Ressourcen + scope-Permissions** wieder — und
+> genau die lassen sich nicht re-importieren (siehe Schritt 6). Daher in der exportierten Datei
+> beim Client `fhir-client` die `authorizationSettings.resources` leeren und die Policies vom
+> Typ `scope` entfernen (Role-/User-Policies und Scopes bleiben erhalten). Diese Objekte werden
+> in Schritt 4 ohnehin neu erzeugt. Eine script-basierte Policy (`script-owner-policy.js`) würde
+> den Export zudem mit `providerFactory is null` scheitern lassen — diese Altlast vorher entfernen.
 
 ---
 
-## 7. Zurücksetzen
+## 8. Zurücksetzen
 
 ```bash
 cd hapi-jpa
@@ -146,5 +189,5 @@ docker compose down            # Container stoppen, Volumes bleiben
 docker compose down -v         # Container UND Volumes löschen (kompletter Reset)
 ```
 
-Nach `down -v` startet alles frisch: Keycloak importiert den Realm neu, die HAPI-DB ist
-leer → Schritt 4 (Seed) erneut ausführen.
+Nach `down -v` startet alles frisch: Keycloak importiert den Realm neu, die HAPI-DB ist leer →
+Schritte 3-4 erneut ausführen (inkl. HAPI-Neustart vor dem Seed).
