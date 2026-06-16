@@ -128,25 +128,15 @@ public class ResourceRegistrationInterceptor {
         log.info("Registering {}/{} in Keycloak - Owner: {}, Creator: {}",
                 resourceType, resourceId, ownerId, creatorId);
 
-        // Register resource in Keycloak
+        // Register resource in Keycloak; Zugriff fuer Dritte wird ausschliesslich
+        // ueber patient-gesteuerte TrustList-Permissions vergeben, nicht ueber Creator-Policies
         keycloakResourceService.registerResource(resourceType, resourceId, ownerId);
-
-        // Grant creator permissions if different from owner
-        if (!creatorId.equals(ownerId)) {
-            keycloakResourceService.grantCreatorPermissions(resourceType, resourceId, creatorId, ownerId);
-        }
     }
 
     private boolean shouldRegisterResource(String resourceType) {
-        switch (resourceType) {
-            case "Patient":
-            case "Condition":
-            case "AllergyIntolerance":
-            case "MedicationStatement":
-                return true;
-            default:
-                return false;
-        }
+        // Zielarchitektur: nur Patient wird in Keycloak registriert; klinische
+        // Ressourcen werden ueber die Permissions des zugehoerigen Patienten autorisiert
+        return "Patient".equals(resourceType);
     }
 
     /**

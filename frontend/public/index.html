@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UMA FHIR Demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Login -->
+  <div id="login-view" class="view">
+    <div class="login-card">
+      <h1>UMA&nbsp;FHIR</h1>
+      <p class="subtitle">Patientengesteuerter Zugriff &middot; SMART on FHIR v2</p>
+      <form id="login-form">
+        <label>Benutzername
+          <input id="username" type="text" autocomplete="username" required />
+        </label>
+        <label>Passwort
+          <input id="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="btn-primary">Anmelden</button>
+        <p id="login-error" class="error"></p>
+      </form>
+      <div class="quick">
+        <span>Schnellauswahl:</span>
+        <button type="button" data-user="alice" data-pass="alice123" class="chip chip-patient">alice (Patient)</button>
+        <button type="button" data-user="dr.smith" data-pass="smith123" class="chip chip-doctor">dr.smith (Arzt)</button>
+        <button type="button" data-user="dr.bob" data-pass="bob123" class="chip chip-doctor">dr.bob (Arzt)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="app-view" class="view hidden">
+    <header class="topbar">
+      <div class="brand">UMA&nbsp;FHIR</div>
+      <div class="userinfo">
+        <span id="who"></span>
+        <span id="roles" class="role-badges"></span>
+        <button id="logout" class="btn-ghost">Abmelden</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <label id="patient-select-wrap" class="patient-select hidden">Patient auswählen
+          <select id="patient-select"></select>
+        </label>
+        <h2 id="patient-heading">Patient</h2>
+        <p class="hint">Wähle eine Aktion. Das Ergebnis zeigt den UMA-Flow und die Durchsetzung.</p>
+        <button class="action" data-tmpl="Patient/{id}" data-label="Patientendaten lesen">👤 Patientendaten</button>
+        <button class="action" data-tmpl="Condition?patient={id}" data-label="Diagnosen (Conditions)">🩺 Diagnosen</button>
+        <button class="action" data-tmpl="MedicationStatement?patient={id}" data-label="Medikation">💊 Medikation</button>
+        <button class="action" data-tmpl="AllergyIntolerance?patient={id}" data-label="Allergien">⚠️ Allergien</button>
+        <button class="action action-summary" data-tmpl="Patient/{id}/$summary" data-label="IPS Patient Summary">📄 $summary (IPS)</button>
+      </aside>
+
+      <section class="content">
+        <div id="flow" class="flow hidden">
+          <h3>UMA-Flow</h3>
+          <ol id="flow-steps"></ol>
+        </div>
+        <div id="result-panel" class="result-panel">
+          <div class="placeholder">Noch keine Anfrage. Wähle links eine Aktion.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

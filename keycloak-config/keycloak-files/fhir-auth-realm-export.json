@@ -45,6 +45,7 @@
   "quickLoginCheckMilliSeconds" : 1000,
   "maxDeltaTimeSeconds" : 43200,
   "failureFactor" : 30,
+  "maxSecondaryAuthFailures" : 0,
   "roles" : {
     "realm" : [ {
       "id" : "52834c63-0987-45b9-8394-1c0cb9e31f22",
@@ -432,6 +433,50 @@
     "notBefore" : 0,
     "groups" : [ ]
   }, {
+    "id" : "569bee32-a9a3-4a9c-a2be-91cdeb6a7403",
+    "username" : "bernd",
+    "firstName" : "Bernd",
+    "lastName" : "Brandt",
+    "email" : "bernd@example.org",
+    "emailVerified" : true,
+    "enabled" : true,
+    "createdTimestamp" : 1781476227806,
+    "totp" : false,
+    "credentials" : [ {
+      "id" : "d64d9968-e373-4181-abe2-0693402c4ca0",
+      "type" : "password",
+      "createdDate" : 1781476229794,
+      "secretData" : "{\"value\":\"zb0VyMxIkhdUZxPRj4fquAjoalFCGfqdZZfo5yBFPuI=\",\"salt\":\"d7j2MB0M9TXC7DaEpHwzdQ==\",\"additionalParameters\":{}}",
+      "credentialData" : "{\"hashIterations\":5,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"7168\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"1\"]}}"
+    } ],
+    "disableableCredentialTypes" : [ ],
+    "requiredActions" : [ ],
+    "realmRoles" : [ "default-roles-fhir-auth", "Patient" ],
+    "notBefore" : 0,
+    "groups" : [ ]
+  }, {
+    "id" : "14f9e3b8-da06-4879-b7d4-a9b862402505",
+    "username" : "clara",
+    "firstName" : "Clara",
+    "lastName" : "Schulz",
+    "email" : "clara@example.org",
+    "emailVerified" : true,
+    "enabled" : true,
+    "createdTimestamp" : 1781476230708,
+    "totp" : false,
+    "credentials" : [ {
+      "id" : "c645cecc-3350-40ff-96a5-e899a3b42083",
+      "type" : "password",
+      "createdDate" : 1781476231439,
+      "secretData" : "{\"value\":\"HX4OF4+QYveKD4NPhvOsPz/pkypUahL2xV6V9LuN9gY=\",\"salt\":\"Y4NCNPntFE+gli7QJmnjxg==\",\"additionalParameters\":{}}",
+      "credentialData" : "{\"hashIterations\":5,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"7168\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"1\"]}}"
+    } ],
+    "disableableCredentialTypes" : [ ],
+    "requiredActions" : [ ],
+    "realmRoles" : [ "default-roles-fhir-auth", "Patient" ],
+    "notBefore" : 0,
+    "groups" : [ ]
+  }, {
     "id" : "97503f80-1f4f-4ae6-8b58-eb50a082acf9",
     "username" : "dr.bob",
     "firstName" : "Bob",
@@ -757,152 +802,85 @@
         "jsonType.label" : "String"
       }
     } ],
-    "defaultClientScopes" : [ "web-origins", "acr", "profile", "roles", "basic", "email" ],
+    "defaultClientScopes" : [ "web-origins", "acr", "profile", "roles", "uma_protection", "basic", "email" ],
     "optionalClientScopes" : [ "address", "phone", "offline_access", "organization", "microprofile-jwt" ],
     "authorizationSettings" : {
       "allowRemoteResourceManagement" : true,
       "policyEnforcementMode" : "ENFORCING",
       "resources" : [ {
-        "name" : "Default Resource",
-        "type" : "urn:fhir-client:resources:default",
+        "name" : "Patient/1",
+        "type" : "Patient",
+        "owner" : {
+          "name" : "alice"
+        },
         "ownerManagedAccess" : false,
+        "displayName" : "Patient/1",
         "attributes" : { },
-        "uris" : [ "/*" ]
-      }, {
-        "name" : "PatientResource",
-        "type" : "http://localhost:8080/fhir/Patient/*",
-        "ownerManagedAccess" : false,
-        "displayName" : "PatientResource",
-        "attributes" : { },
-        "uris" : [ "http://localhost:8080/fhir/Patient/*" ],
+        "uris" : [ ],
         "scopes" : [ {
-          "name" : "read"
+          "name" : "patient/Patient.rs"
         }, {
-          "name" : "update"
+          "name" : "patient/AllergyIntolerance.rs"
         }, {
-          "name" : "delete"
+          "name" : "patient/Patient.r"
         }, {
-          "name" : "create"
-        } ],
-        "icon_uri" : ""
+          "name" : "patient/MedicationStatement.rs"
+        }, {
+          "name" : "patient/Condition.rs"
+        } ]
       }, {
-        "name" : "AllergyIntoleranceResource",
-        "type" : "http://localhost:8080/fhir/AllergyIntolerance/*",
+        "name" : "Patient/7",
+        "type" : "Patient",
+        "owner" : {
+          "name" : "bernd"
+        },
         "ownerManagedAccess" : false,
-        "displayName" : "AllergyIntoleranceResource",
+        "displayName" : "Patient/7",
         "attributes" : { },
-        "uris" : [ "http://localhost:8080/fhir/AllergyIntolerance/*" ],
+        "uris" : [ ],
         "scopes" : [ {
-          "name" : "read"
+          "name" : "patient/Patient.rs"
         }, {
-          "name" : "update"
+          "name" : "patient/AllergyIntolerance.rs"
         }, {
-          "name" : "delete"
+          "name" : "patient/Patient.r"
         }, {
-          "name" : "create"
-        } ],
-        "icon_uri" : ""
+          "name" : "patient/MedicationStatement.rs"
+        }, {
+          "name" : "patient/Condition.rs"
+        } ]
       }, {
-        "name" : "MedicationStatementResource",
-        "type" : "http://localhost:8080/fhir/MedicationStatement/*",
+        "name" : "Patient/11",
+        "type" : "Patient",
+        "owner" : {
+          "name" : "clara"
+        },
         "ownerManagedAccess" : false,
-        "displayName" : "MedicationStatementResource",
+        "displayName" : "Patient/11",
         "attributes" : { },
-        "uris" : [ "http://localhost:8080/fhir/MedicationStatement/*" ],
+        "uris" : [ ],
         "scopes" : [ {
-          "name" : "read"
+          "name" : "patient/Patient.rs"
         }, {
-          "name" : "update"
+          "name" : "patient/AllergyIntolerance.rs"
         }, {
-          "name" : "delete"
+          "name" : "patient/Patient.r"
         }, {
-          "name" : "create"
-        } ],
-        "icon_uri" : ""
-      }, {
-        "name" : "ConditionResource",
-        "type" : "http://localhost:8080/fhir/Condition/*",
-        "ownerManagedAccess" : false,
-        "displayName" : "ConditionResource",
-        "attributes" : { },
-        "uris" : [ "http://localhost:8080/fhir/Condition/*" ],
-        "scopes" : [ {
-          "name" : "read"
+          "name" : "patient/MedicationStatement.rs"
         }, {
-          "name" : "update"
-        }, {
-          "name" : "delete"
-        }, {
-          "name" : "create"
-        } ],
-        "icon_uri" : ""
+          "name" : "patient/Condition.rs"
+        } ]
       } ],
       "policies" : [ {
-        "name" : "Allow fhir-client Policy",
-        "type" : "client",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "UNANIMOUS",
-        "config" : {
-          "clients" : "[\"fhir-client\"]"
-        }
-      }, {
-        "name" : "Patient Access Policy",
-        "description" : "Policy for users with Patient role",
+        "name" : "RolePolicy-Doctor",
         "type" : "role",
         "logic" : "POSITIVE",
         "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "fetchRoles" : "false",
-          "roles" : "[{\"id\":\"Patient\",\"required\":true}]"
-        }
-      }, {
-        "name" : "Doctor Access Policy",
-        "description" : "Policy for users with Doctor role",
-        "type" : "role",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "UNANIMOUS",
-        "config" : {
-          "fetchRoles" : "false",
           "roles" : "[{\"id\":\"Doctor\",\"required\":true}]"
         }
       }, {
-        "name" : "Administrator Access Policy",
-        "description" : "Policy for administrators with full access",
-        "type" : "role",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "UNANIMOUS",
-        "config" : {
-          "fetchRoles" : "false",
-          "roles" : "[{\"id\":\"Administrator\",\"required\":true}]"
-        }
-      }, {
-        "name" : "Patient or Admin Access",
-        "description" : "Allows patients to access their own data or admins to access all",
-        "type" : "aggregate",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "applyPolicies" : "[\"Administrator Access Policy\",\"Patient Access Policy\"]"
-        }
-      }, {
-        "name" : "Doctor or Admin Access",
-        "description" : "Allows doctors and admins to access patient data",
-        "type" : "aggregate",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "applyPolicies" : "[\"Doctor Access Policy\",\"Administrator Access Policy\"]"
-        }
-      }, {
-        "name" : "Resource Owner Policy",
-        "description" : "Grans access to resource owners",
-        "type" : "script-owner-policy.js",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "UNANIMOUS",
-        "config" : { }
-      }, {
-        "name" : "Dr. Bob User Policy",
-        "description" : "",
+        "name" : "TrustList-Patient1-DrBob",
         "type" : "user",
         "logic" : "POSITIVE",
         "decisionStrategy" : "UNANIMOUS",
@@ -910,8 +888,7 @@
           "users" : "[\"dr.bob\"]"
         }
       }, {
-        "name" : "Dr Smith User Policy",
-        "description" : "",
+        "name" : "TrustList-Patient1-DrSmith",
         "type" : "user",
         "logic" : "POSITIVE",
         "decisionStrategy" : "UNANIMOUS",
@@ -919,193 +896,90 @@
           "users" : "[\"dr.smith\"]"
         }
       }, {
-        "name" : "Patient Read Own Data",
-        "description" : "Patients can read their own Patient resource",
-        "type" : "scope",
+        "name" : "UserPolicy-Alice",
+        "type" : "user",
         "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
+        "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "defaultResourceType" : "",
-          "resources" : "[\"PatientResource\"]",
-          "scopes" : "[\"read\"]",
-          "applyPolicies" : "[\"Patient or Admin Access\"]"
+          "users" : "[\"alice\"]"
         }
       }, {
-        "name" : "Patient Write Own Data",
-        "description" : "Patients can update their own Patient resource",
-        "type" : "scope",
+        "name" : "UserPolicy-Owner-bernd",
+        "type" : "user",
         "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
+        "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "resources" : "[\"PatientResource\"]",
-          "scopes" : "[\"update\"]",
-          "applyPolicies" : "[\"Patient or Admin Access\"]"
+          "users" : "[\"bernd\"]"
         }
       }, {
-        "name" : "Doctor Read Patient Data",
-        "description" : "Doctors can read Patient resources with permission",
-        "type" : "scope",
+        "name" : "UserPolicy-Owner-clara",
+        "type" : "user",
         "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
+        "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "resources" : "[\"PatientResource\"]",
-          "scopes" : "[\"read\"]",
-          "applyPolicies" : "[\"Doctor or Admin Access\"]"
+          "users" : "[\"clara\"]"
         }
       }, {
-        "name" : "Admin Full Patient Access",
-        "description" : "Admins have full access to Patient resources",
+        "name" : "Permission-Patient1-Alice-Full",
         "type" : "scope",
         "logic" : "POSITIVE",
         "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "resources" : "[\"PatientResource\"]",
-          "scopes" : "[\"update\",\"read\",\"create\",\"delete\"]",
-          "applyPolicies" : "[\"Administrator Access Policy\"]"
+          "resources" : "[\"Patient/1\"]",
+          "scopes" : "[\"patient/MedicationStatement.rs\",\"patient/Patient.rs\",\"patient/Patient.r\",\"patient/AllergyIntolerance.rs\",\"patient/Condition.rs\"]",
+          "applyPolicies" : "[\"UserPolicy-Alice\"]"
         }
       }, {
-        "name" : "Patient Read Own Allergies",
-        "description" : "Patients can read their own allergy information",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"AllergyIntoleranceResource\"]",
-          "scopes" : "[\"read\"]",
-          "applyPolicies" : "[\"Patient or Admin Access\"]"
-        }
-      }, {
-        "name" : "Doctor Manage Allergies",
-        "description" : "Doctors can read/create/update allergy records",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"AllergyIntoleranceResource\"]",
-          "scopes" : "[\"update\",\"read\",\"create\"]",
-          "applyPolicies" : "[\"Doctor or Admin Access\"]"
-        }
-      }, {
-        "name" : "Admin Full Allergy Access",
-        "description" : "Admins have full access to allergy records",
+        "name" : "Permission-Patient1-DrBob-Condition",
         "type" : "scope",
         "logic" : "POSITIVE",
         "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "resources" : "[\"AllergyIntoleranceResource\"]",
-          "scopes" : "[\"update\",\"read\",\"create\",\"delete\"]",
-          "applyPolicies" : "[\"Administrator Access Policy\"]"
+          "resources" : "[\"Patient/1\"]",
+          "scopes" : "[\"patient/Condition.rs\"]",
+          "applyPolicies" : "[\"RolePolicy-Doctor\",\"TrustList-Patient1-DrBob\"]"
         }
       }, {
-        "name" : "Patient Read Own Conditions",
-        "description" : "Patients can read their own medical conditions",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"ConditionResource\"]",
-          "scopes" : "[\"read\"]",
-          "applyPolicies" : "[\"Patient or Admin Access\"]"
-        }
-      }, {
-        "name" : "Doctor Manage Conditions",
-        "description" : "Doctors can read/create/update Conditions",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"ConditionResource\"]",
-          "scopes" : "[\"update\",\"read\",\"create\"]",
-          "applyPolicies" : "[\"Doctor or Admin Access\"]"
-        }
-      }, {
-        "name" : "Admin Full Condition Access",
-        "description" : "Admins have full access to Conditions",
+        "name" : "Permission-Patient1-DrSmith-Full",
         "type" : "scope",
         "logic" : "POSITIVE",
         "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "resources" : "[\"ConditionResource\"]",
-          "scopes" : "[\"update\",\"read\",\"create\",\"delete\"]",
-          "applyPolicies" : "[\"Administrator Access Policy\"]"
+          "resources" : "[\"Patient/1\"]",
+          "scopes" : "[\"patient/Patient.r\"]",
+          "applyPolicies" : "[\"RolePolicy-Doctor\",\"TrustList-Patient1-DrSmith\"]"
         }
       }, {
-        "name" : "Patient Read Own Medications",
-        "description" : "Patients can read their own medication records",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"MedicationStatementResource\"]",
-          "scopes" : "[\"read\"]",
-          "applyPolicies" : "[\"Patient or Admin Access\"]"
-        }
-      }, {
-        "name" : "Doctor Manage Medications",
-        "description" : "Doctors can read/create/update medication statements",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "resources" : "[\"MedicationStatementResource\"]",
-          "scopes" : "[\"update\",\"read\",\"create\"]",
-          "applyPolicies" : "[\"Doctor or Admin Access\"]"
-        }
-      }, {
-        "name" : "Admin Full Medication Access",
-        "description" : "Admins have full access to medication records",
+        "name" : "Permission-Patient11-Owner-Full",
         "type" : "scope",
         "logic" : "POSITIVE",
         "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "resources" : "[\"MedicationStatementResource\"]",
-          "scopes" : "[\"update\",\"read\",\"create\",\"delete\"]",
-          "applyPolicies" : "[\"Administrator Access Policy\"]"
+          "resources" : "[\"Patient/11\"]",
+          "scopes" : "[\"patient/MedicationStatement.rs\",\"patient/Patient.rs\",\"patient/Patient.r\",\"patient/AllergyIntolerance.rs\",\"patient/Condition.rs\"]",
+          "applyPolicies" : "[\"UserPolicy-Owner-clara\"]"
         }
       }, {
-        "name" : "Patient Owner Access Permission",
-        "description" : "Resource owners can access their resources",
+        "name" : "Permission-Patient7-Owner-Full",
         "type" : "scope",
         "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
+        "decisionStrategy" : "UNANIMOUS",
         "config" : {
-          "defaultResourceType" : "Patient",
-          "applyPolicies" : "[\"Resource Owner Policy\"]",
-          "scopes" : "[\"write\",\"read\",\"delete\"]"
-        }
-      }, {
-        "name" : "Condition Owner Access Permission",
-        "description" : "Resource owners can access their resources",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "defaultResourceType" : "Condition",
-          "applyPolicies" : "[\"Resource Owner Policy\"]",
-          "scopes" : "[\"write\",\"read\",\"delete\"]"
-        }
-      }, {
-        "name" : "MediactionStatement Owner Access Permission",
-        "description" : "Resource owners can access their resources",
-        "type" : "scope",
-        "logic" : "POSITIVE",
-        "decisionStrategy" : "AFFIRMATIVE",
-        "config" : {
-          "defaultResourceType" : "MediactionStatement",
-          "applyPolicies" : "[\"Resource Owner Policy\"]",
-          "scopes" : "[\"write\",\"read\",\"delete\"]"
+          "resources" : "[\"Patient/7\"]",
+          "scopes" : "[\"patient/MedicationStatement.rs\",\"patient/Patient.rs\",\"patient/Patient.r\",\"patient/AllergyIntolerance.rs\",\"patient/Condition.rs\"]",
+          "applyPolicies" : "[\"UserPolicy-Owner-bernd\"]"
         }
       } ],
       "scopes" : [ {
-        "name" : "read"
+        "name" : "patient/Patient.r"
       }, {
-        "name" : "create"
+        "name" : "patient/Patient.rs"
       }, {
-        "name" : "update"
+        "name" : "patient/Condition.rs"
       }, {
-        "name" : "delete"
+        "name" : "patient/MedicationStatement.rs"
       }, {
-        "name" : "write"
+        "name" : "patient/AllergyIntolerance.rs"
       } ],
       "decisionStrategy" : "AFFIRMATIVE"
     }
@@ -1326,8 +1200,9 @@
       "consentRequired" : false,
       "config" : {
         "user.session.note" : "clientAddress",
-        "id.token.claim" : "true",
         "introspection.token.claim" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
         "access.token.claim" : "true",
         "claim.name" : "clientAddress",
         "jsonType.label" : "String"
@@ -1340,8 +1215,9 @@
       "consentRequired" : false,
       "config" : {
         "user.session.note" : "client_id",
-        "id.token.claim" : "true",
         "introspection.token.claim" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
         "access.token.claim" : "true",
         "claim.name" : "client_id",
         "jsonType.label" : "String"
@@ -1354,8 +1230,9 @@
       "consentRequired" : false,
       "config" : {
         "user.session.note" : "clientHost",
-        "id.token.claim" : "true",
         "introspection.token.claim" : "true",
+        "userinfo.token.claim" : "true",
+        "id.token.claim" : "true",
         "access.token.claim" : "true",
         "claim.name" : "clientHost",
         "jsonType.label" : "String"
@@ -1550,6 +1427,13 @@
         "userinfo.token.claim" : "true"
       }
     } ]
+  }, {
+    "id" : "04173e42-3848-4b41-a3ff-be0a86bc4428",
+    "name" : "uma_protection",
+    "protocol" : "openid-connect",
+    "attributes" : {
+      "include.in.token.scope" : "true"
+    }
   }, {
     "id" : "fd772a4e-cf4e-4c53-b03c-9a07ffa7ca26",
     "name" : "profile",
@@ -1857,7 +1741,7 @@
       "subType" : "anonymous",
       "subComponents" : { },
       "config" : {
-        "allowed-protocol-mapper-types" : [ "oidc-sha256-pairwise-sub-mapper", "oidc-full-name-mapper", "oidc-usermodel-property-mapper", "oidc-address-mapper", "saml-role-list-mapper", "oidc-usermodel-attribute-mapper", "saml-user-attribute-mapper", "saml-user-property-mapper" ]
+        "allowed-protocol-mapper-types" : [ "oidc-usermodel-attribute-mapper", "saml-user-property-mapper", "oidc-sha256-pairwise-sub-mapper", "oidc-address-mapper", "oidc-full-name-mapper", "saml-role-list-mapper", "oidc-usermodel-property-mapper", "saml-user-attribute-mapper" ]
       }
     }, {
       "id" : "5907d8ba-9a9c-4510-8335-838527a4003e",
@@ -1882,7 +1766,7 @@
       "subType" : "authenticated",
       "subComponents" : { },
       "config" : {
-        "allowed-protocol-mapper-types" : [ "oidc-usermodel-property-mapper", "saml-role-list-mapper", "oidc-address-mapper", "oidc-full-name-mapper", "saml-user-attribute-mapper", "oidc-sha256-pairwise-sub-mapper", "oidc-usermodel-attribute-mapper", "saml-user-property-mapper" ]
+        "allowed-protocol-mapper-types" : [ "oidc-address-mapper", "oidc-full-name-mapper", "saml-user-attribute-mapper", "saml-role-list-mapper", "saml-user-property-mapper", "oidc-usermodel-property-mapper", "oidc-usermodel-attribute-mapper", "oidc-sha256-pairwise-sub-mapper" ]
       }
     }, {
       "id" : "719f531f-6d4d-435e-8a6c-5dfffd7557c5",
@@ -2591,11 +2475,12 @@
     "cibaInterval" : "5",
     "realmReusableOtpCode" : "false"
   },
-  "keycloakVersion" : "26.4.6",
+  "keycloakVersion" : "26.6.3",
   "userManagedAccessAllowed" : false,
   "organizationsEnabled" : false,
   "verifiableCredentialsEnabled" : false,
   "adminPermissionsEnabled" : false,
+  "scimApiEnabled" : false,
   "clientProfiles" : {
     "profiles" : [ ]
   },
