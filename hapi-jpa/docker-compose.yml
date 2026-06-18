@@ -20,7 +20,7 @@ services:
 
   # Keycloak Authorization Server
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.6.3
     container_name: keycloak-uma
     command: start-dev --features=preview --import-realm
     restart: always

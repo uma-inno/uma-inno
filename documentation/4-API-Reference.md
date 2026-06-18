@@ -8,17 +8,41 @@
 
 | Resource | Endpoints |
 |----------|-----------|
-| Patient | GET, POST, PUT, DELETE, $everything |
+| Patient | GET, POST, PUT, DELETE, `$summary` |
 | Condition | GET, POST, PUT, DELETE |
 | AllergyIntolerance | GET, POST, PUT, DELETE |
 | MedicationStatement | GET, POST, PUT, DELETE |
 
-All require UMA authorization (RPT token).
+All require UMA authorization (RPT token), except create (POST) which uses a role-based check.
+Reads of clinical resources must be patient-scoped (e.g. `Condition?patient=1`); type-level
+`Patient` access (e.g. `GET /Patient`) is rejected.
 
 ### Public Endpoints
 
-- `GET /fhir/metadata` - FHIR CapabilityStatement
-- `GET /actuator/health` - Health check
+- `GET /fhir/metadata` — FHIR CapabilityStatement
+- `GET /actuator/health` — health check
+- `GET /.well-known/*`, static UI assets (`/`, `/css/`, `/js/`, `/img/`, `/favicon`)
+- `GET /fhir/swagger-ui/index.html` — OpenAPI UI (`openapi_enabled: true`)
+
+---
+
+## Frontend Proxy API (recommended for testing)
+
+The demo frontend (`http://localhost:3000`) runs the UMA dance server-side. Useful for quick checks:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/login` `{username,password}` | Password grant + resolves the patient context; sets a session cookie |
+| `GET /api/fhir/<fhirPath>` | Generic FHIR proxy with full UMA dance → `{status, steps, resource}` |
+| `GET /api/me` | Current session (roles, patient context) |
+| `POST /api/logout` | Destroys the session |
+
+```bash
+curl -s -c cj.txt -X POST http://localhost:3000/api/login \
+  -H "Content-Type: application/json" -d '{"username":"dr.smith","password":"smith123"}'
+curl -s -b cj.txt http://localhost:3000/api/fhir/Patient/1            # -> {status:200, steps:[...], resource:{...}}
+curl -s -b cj.txt http://localhost:3000/api/fhir/Patient/1/\$summary  # IPS document bundle
+```
 
 ---
 
@@ -48,17 +72,17 @@ curl -X POST http://localhost:8080/realms/FHIR-Auth/protocol/openid-connect/toke
 
 ---
 
-## Complete UMA Flow Example
+## Complete UMA Flow Example (direct, without the proxy)
 
-### Step 1: Request without token (get permission ticket)
+### Step 1: Request with an access token (get permission ticket)
 ```bash
-curl -i http://localhost:8081/fhir/Patient/1
+curl -i -H "Authorization: Bearer $ALICE_TOKEN" http://localhost:8081/fhir/Patient/1
 ```
 
 Response:
 ```
 HTTP/1.1 401 Unauthorized
-WWW-Authenticate: UMA realm="FHIR-Auth", as_uri="http://localhost:8080/realms/FHIR-Auth", ticket="<TICKET>"
+WWW-Authenticate: UMA realm="FHIR-Auth", as_uri="http://keycloak:8080/realms/FHIR-Auth", ticket="<TICKET>"
 ```
 
 ### Step 2: Get user token
@@ -92,18 +116,21 @@ curl -H "Authorization: Bearer $RPT" http://localhost:8081/fhir/Patient/1
   "resourceType": "Patient",
   "id": "1",
   "identifier": [{"system": "keycloak-uuid", "value": "5441cea9-..."}],
-  "name": [{"family": "Smith", "given": ["Alice"]}],
+  "name": [{"family": "Anderson", "given": ["Alice"]}],
   "gender": "female",
-  "birthDate": "1985-03-15"
+  "birthDate": "1990-01-01"
 }
 ```
 
-### Patient $everything
+### Patient `$summary` (International Patient Summary)
 ```bash
-curl -H "Authorization: Bearer $RPT" http://localhost:8081/fhir/Patient/1/\$everything
+curl -H "Authorization: Bearer $RPT" http://localhost:8081/fhir/Patient/1/\$summary
 ```
 
-Returns a Bundle with all resources related to the patient.
+Returns a FHIR `Bundle` of type `document` with a `Composition` plus the patient and the
+permitted clinical resources. Sections are included only if the RPT carries the matching scope
+and individual instances pass the blacklist filter — see
+[6-$summary-Operation.md](6-$summary-Operation.md).
 
 ### 401 Unauthorized
 ```json
@@ -121,7 +148,7 @@ Returns a Bundle with all resources related to the patient.
 
 ## Standards Compliance
 
-- **UMA 2.0**: Full 3-step flow with permission tickets and RPTs
-- **FHIR R5**: Complete CRUD operations, $everything, OperationOutcome
-- **OAuth 2.0**: Bearer tokens, token introspection
-- **JWT**: RS256 signed tokens with permission claims
+- **UMA 2.0**: permission tickets + RPTs via Keycloak's Protection API
+- **SMART on FHIR v2**: `patient/<Type>.<interactions>` scopes
+- **FHIR R5**: CRUD operations, `$summary` (IPS), OperationOutcome
+- **OAuth 2.0 / JWT**: Bearer tokens; RS256-signed RPTs validated locally against the realm JWKS
