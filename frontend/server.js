@@ -125,6 +125,7 @@ app.post('/api/login', async (req, res) => {
     const tokens = await r.json();
     const claims = decodeJwt(tokens.access_token);
     req.session.accessToken = tokens.access_token;
+    req.session.refreshToken = tokens.refresh_token;
     req.session.username = claims.preferred_username || username;
     req.session.roles = (claims.realm_access?.roles || []).filter(
       (role) => ['Doctor', 'Patient', 'Administrator'].includes(role)
@@ -218,6 +219,42 @@ async function exchangeTicket(session, ticket) {
   return json.access_token;
 }
 
+// Stellt sicher, dass das Access Token der Session noch gueltig ist. Keycloak Access
+// Tokens leben nur ~5 Min; laeuft es (binnen 30s) ab, wird es per refresh_token erneuert.
+// Ohne das schlaegt der UMA-Ticket-Tausch nach Ablauf mit access_denied fehl (-> faelschlich 403).
+async function ensureFreshToken(session) {
+  if (!session.accessToken) return false;
+  const claims = decodeJwt(session.accessToken);
+  const exp = claims.exp || 0;
+  const stillValid = exp * 1000 - Date.now() > 30_000; // 30s Puffer
+  if (stillValid) return true;
+  if (!session.refreshToken) return false;
+  try {
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      refresh_token: session.refreshToken,
+    });
+    const r = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!r.ok) {
+      console.warn('Token-Refresh fehlgeschlagen (Refresh-Token abgelaufen?):', r.status);
+      return false;
+    }
+    const tokens = await r.json();
+    session.accessToken = tokens.access_token;
+    if (tokens.refresh_token) session.refreshToken = tokens.refresh_token;
+    return true;
+  } catch (e) {
+    console.warn('Token-Refresh-Fehler:', e.message);
+    return false;
+  }
+}
+
 // Einzelner HTTP-Aufruf gegen den FHIR-Server (optional mit RPT statt Access Token).
 async function fhirRequest(session, method, fhirPath, rpt) {
   const headers = { Accept: 'application/fhir+json' };
@@ -231,6 +268,11 @@ async function fhirRequest(session, method, fhirPath, rpt) {
 // Login-Patientenaufloesung verwendet.
 async function umaFetch(session, fhirPath) {
   const steps = [];
+  // Access Token bei Bedarf erneuern, bevor der UMA-Flow startet
+  const fresh = await ensureFreshToken(session);
+  if (!fresh) {
+    return { status: 440, steps, payload: { error: 'Sitzung abgelaufen. Bitte neu anmelden.' } };
+  }
   // Schritt 1: Versuch mit dem Access Token (loest 401 + Permission Ticket aus)
   let response = await fhirRequest(session, 'GET', fhirPath, null);
   steps.push({ step: 'Access Token', status: response.status });

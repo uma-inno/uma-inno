@@ -180,7 +180,9 @@ function renderResource(label, data) {
   const status = data.status;
   let body = '';
 
-  if (status !== 200) {
+  if (status === 440) {
+    body = `<div class="denied-box"><strong>Sitzung abgelaufen.</strong><br/>${data.error || 'Bitte neu anmelden.'}</div>`;
+  } else if (status !== 200) {
     const msg = data.error
       || data.resource?.issue?.[0]?.diagnostics
       || 'Die Patientenfreigabe deckt diese Ressource für deine Rolle nicht ab.';
