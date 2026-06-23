@@ -23,6 +23,17 @@ const MASTER_TOKEN_URL = `${KEYCLOAK}/realms/master/protocol/openid-connect/toke
 const ADMIN_BASE = `${KEYCLOAK}/admin/realms/${REALM}`;
 const UMA_GRANT = 'urn:ietf:params:oauth:grant-type:uma-ticket';
 
+// Lese-Scopes je FHIR-Typ (nur Lesen, .rs) fuer die patientengesteuerte Freigabe.
+const READ_SCOPE_BY_TYPE = {
+  Patient: 'patient/Patient.rs',
+  Condition: 'patient/Condition.rs',
+  MedicationStatement: 'patient/MedicationStatement.rs',
+  AllergyIntolerance: 'patient/AllergyIntolerance.rs',
+};
+const TYPE_LABELS = { Patient: 'Stammdaten', Condition: 'Diagnosen', MedicationStatement: 'Medikation', AllergyIntolerance: 'Allergien' };
+// Nur klinische Instanzen sind einzeln sperrbar (Stammdaten = der ganze Patient).
+const BLACKLISTABLE = ['Condition', 'MedicationStatement', 'AllergyIntolerance'];
+
 const app = express();
 app.use(express.json());
 app.use(session({
@@ -62,15 +73,20 @@ async function getAdminToken() {
 // Liefert [{ id, ownerId, ownerName }]. (Die FHIR-Patient-Suche ist UMA-gesperrt,
 // daher kommen Liste und Eigentuemer aus der Authorization-Konfiguration.)
 let clientUuidCache = null;
-async function listKeycloakPatients(adminToken) {
+async function getClientUuid(adminToken) {
   if (!clientUuidCache) {
     const cr = await fetch(`${ADMIN_BASE}/clients?clientId=${CLIENT_ID}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     clientUuidCache = (await cr.json())[0].id;
   }
+  return clientUuidCache;
+}
+
+async function listKeycloakPatients(adminToken) {
+  const cuid = await getClientUuid(adminToken);
   const rr = await fetch(
-    `${ADMIN_BASE}/clients/${clientUuidCache}/authz/resource-server/resource?first=0&max=200&deep=true`,
+    `${ADMIN_BASE}/clients/${cuid}/authz/resource-server/resource?first=0&max=200&deep=true`,
     { headers: { Authorization: `Bearer ${adminToken}` } }
   );
   const resources = await rr.json();
@@ -78,6 +94,7 @@ async function listKeycloakPatients(adminToken) {
     .filter((r) => /^Patient\/\d+$/.test(r.name))
     .map((r) => ({
       id: r.name.replace('Patient/', ''),
+      rsid: r._id,
       ownerId: r.owner?.id || null,
       ownerName: r.owner?.name || null,
     }));
@@ -118,7 +135,9 @@ app.post('/api/login', async (req, res) => {
     res.json({
       username: req.session.username,
       roles: req.session.roles,
-      patientId: req.session.patientId,
+      ownPatientId: req.session.ownPatientId,
+      isDoctor: req.session.isDoctor,
+      isPatient: req.session.ownPatientId != null,
       patients: req.session.patients,
     });
   } catch (e) {
@@ -126,15 +145,17 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Bestimmt den Patientenkontext nach dem Login (Quelle: Keycloak-Authorization-Config):
-//  - Patient-User: der Patient, dessen Owner die eigene Keycloak-UUID (sub) ist.
-//    patientId gesetzt, patients enthaelt nur den eigenen Patienten.
-//  - Aerzte/Admin: kein eigener Patient (patientId = null); patients = alle Patienten
-//    zur Auswahl. Welche davon zugaenglich sind, entscheidet erst die UMA-Durchsetzung.
+// Bestimmt den Patientenkontext nach dem Login (Quelle: Keycloak-Authorization-Config).
+// Rollenagnostisch — ein User kann gleichzeitig Patient UND Arzt sein:
+//  - ownPatientId: der Patient, dessen Owner die eigene Keycloak-UUID (sub) ist
+//    (eigener Datensatz), sofern vorhanden. Wird IMMER ermittelt, egal welche Rollen.
+//  - isDoctor: hat die Doctor-Rolle -> darf die Patientenauswahl sehen.
+//  - patients: Auswahlliste. Fuer Aerzte alle Patienten, sonst nur der eigene.
+// Welche davon tatsaechlich zugaenglich sind, entscheidet erst die UMA-Durchsetzung.
 async function resolvePatientContext(session, sub) {
-  session.patientId = null;
+  session.ownPatientId = null;
+  session.isDoctor = session.roles.includes('Doctor');
   session.patients = [];
-  const isPatient = session.roles.includes('Patient') && !session.roles.includes('Doctor');
   try {
     const adminToken = await getAdminToken();
     if (!adminToken) {
@@ -144,17 +165,18 @@ async function resolvePatientContext(session, sub) {
     const all = await listKeycloakPatients(adminToken);
     const toEntry = (p) => ({ id: p.id, label: `${p.ownerName || 'Patient'} (Patient/${p.id})` });
 
-    if (isPatient) {
-      const own = all.find((p) => p.ownerId === sub);
-      if (own) {
-        session.patientId = own.id;
-        session.patients = [toEntry(own)];
-      }
-    } else {
-      // numerisch sortiert fuer stabile Reihenfolge
-      session.patients = all
-        .sort((a, b) => Number(a.id) - Number(b.id))
-        .map(toEntry);
+    // Eigenen Datensatz immer suchen (unabhaengig von Rollen)
+    const own = all.find((p) => p.ownerId === sub);
+    if (own) {
+      session.ownPatientId = own.id;
+    }
+
+    if (session.isDoctor) {
+      // Arzt-Sicht: alle Patienten zur Auswahl (numerisch sortiert)
+      session.patients = all.sort((a, b) => Number(a.id) - Number(b.id)).map(toEntry);
+    } else if (own) {
+      // reiner Patient: nur der eigene
+      session.patients = [toEntry(own)];
     }
   } catch (e) {
     console.warn('Patientenkontext konnte nicht aufgeloest werden:', e.message);
@@ -170,7 +192,9 @@ app.get('/api/me', (req, res) => {
   res.json({
     username: req.session.username,
     roles: req.session.roles,
-    patientId: req.session.patientId,
+    ownPatientId: req.session.ownPatientId,
+    isDoctor: req.session.isDoctor,
+    isPatient: req.session.ownPatientId != null,
     patients: req.session.patients,
   });
 });
@@ -249,6 +273,189 @@ app.get('/api/fhir/*', async (req, res) => {
     res.status(result.status).json({ status: result.status, steps: result.steps, resource: result.payload });
   } catch (e) {
     res.status(502).json({ error: 'FHIR-Server nicht erreichbar: ' + e.message, steps: [] });
+  }
+});
+
+// ============================================================================
+// Patientengesteuerte Zugriffsverwaltung
+// Der Patient (Owner) gibt Aerzten pro Ressourcentyp Lesezugriff frei (Trust-List
+// + SMART-Scopes) und sperrt einzelne Instanzen (Blacklist). Alles laeuft ueber den
+// Admin-Token, NACHDEM der Proxy geprueft hat, dass der eingeloggte User Owner der
+// Ziel-Ressource ist (sessionOwner). Naming: Permission/TrustList-Patient<id>-<arzt>,
+// Blacklist-<patId>-<resType>-<resId>-<docId> (vgl. UmaBlacklistService).
+// ============================================================================
+const AUTHZ = (cuid) => `${ADMIN_BASE}/clients/${cuid}/authz/resource-server`;
+
+function sessionOwner(req, res) {
+  if (!req.session.accessToken) { res.status(401).json({ error: 'nicht angemeldet' }); return null; }
+  if (!req.session.ownPatientId) { res.status(403).json({ error: 'kein eigener Patient-Datensatz' }); return null; }
+  return String(req.session.ownPatientId);
+}
+
+async function adminJson(adminToken, url) {
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${adminToken}` } });
+  return r.ok ? r.json() : null;
+}
+async function adminSend(adminToken, method, url, body) {
+  const opts = { method, headers: { Authorization: `Bearer ${adminToken}` } };
+  if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  return fetch(url, opts);
+}
+async function listDoctors(adminToken) {
+  const users = (await adminJson(adminToken, `${ADMIN_BASE}/roles/Doctor/users?max=200`)) || [];
+  return users.map((u) => ({ id: u.id, username: u.username, name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username }));
+}
+async function getScopeIds(adminToken) {
+  const cuid = await getClientUuid(adminToken);
+  const scopes = (await adminJson(adminToken, `${AUTHZ(cuid)}/scope?max=200`)) || [];
+  const map = {};
+  for (const s of scopes) map[s.name] = s.id;
+  return map;
+}
+async function findPolicyByName(adminToken, name) {
+  const cuid = await getClientUuid(adminToken);
+  const list = (await adminJson(adminToken, `${AUTHZ(cuid)}/policy?name=${encodeURIComponent(name)}&max=100`)) || [];
+  return list.find((p) => p.name === name) || null;
+}
+async function ensureUserPolicy(adminToken, name, userId) {
+  const existing = await findPolicyByName(adminToken, name);
+  if (existing) return existing.id;
+  const cuid = await getClientUuid(adminToken);
+  const r = await adminSend(adminToken, 'POST', `${AUTHZ(cuid)}/policy/user`,
+    { name, type: 'user', logic: 'POSITIVE', decisionStrategy: 'UNANIMOUS', users: [userId] });
+  return (await r.json()).id;
+}
+async function permissionScopeNames(adminToken, permId) {
+  const cuid = await getClientUuid(adminToken);
+  const scopes = (await adminJson(adminToken, `${AUTHZ(cuid)}/policy/${permId}/scopes`)) || [];
+  return scopes.map((s) => s.name);
+}
+async function upsertScopePermission(adminToken, name, rsid, scopeIds, policyIds) {
+  const cuid = await getClientUuid(adminToken);
+  const body = { name, type: 'scope', logic: 'POSITIVE', decisionStrategy: 'UNANIMOUS', resources: [rsid], scopes: scopeIds, policies: policyIds };
+  const existing = await findPolicyByName(adminToken, name);
+  if (existing) {
+    body.id = existing.id;
+    await adminSend(adminToken, 'PUT', `${AUTHZ(cuid)}/permission/scope/${existing.id}`, body);
+  } else {
+    await adminSend(adminToken, 'POST', `${AUTHZ(cuid)}/permission/scope`, body);
+  }
+}
+async function deletePolicyByName(adminToken, name) {
+  const cuid = await getClientUuid(adminToken);
+  const p = await findPolicyByName(adminToken, name);
+  if (p) await adminSend(adminToken, 'DELETE', `${AUTHZ(cuid)}/policy/${p.id}`);
+}
+async function listBlacklistNames(adminToken) {
+  const cuid = await getClientUuid(adminToken);
+  const list = (await adminJson(adminToken, `${AUTHZ(cuid)}/policy?name=Blacklist-&max=500`)) || [];
+  return new Set(list.filter((p) => p.name.startsWith('Blacklist-')).map((p) => p.name));
+}
+
+// --- Aktueller Freigabe-Zustand fuer den eigenen Patienten ---
+app.get('/api/access/state', async (req, res) => {
+  const patientId = sessionOwner(req, res);
+  if (!patientId) return;
+  try {
+    const adminToken = await getAdminToken();
+    if (!adminToken) return res.status(502).json({ error: 'Kein Admin-Token' });
+
+    const doctors = await listDoctors(adminToken);
+    const blacklist = await listBlacklistNames(adminToken);
+
+    // gewaehrte Scope-Typen je Arzt aus der (patient,arzt)-Permission
+    const docState = [];
+    for (const d of doctors) {
+      const perm = await findPolicyByName(adminToken, `Permission-Patient${patientId}-${d.username}`);
+      let scopes = [];
+      if (perm) {
+        const names = await permissionScopeNames(adminToken, perm.id);
+        scopes = Object.keys(READ_SCOPE_BY_TYPE).filter((t) => names.includes(READ_SCOPE_BY_TYPE[t]));
+      }
+      docState.push({ id: d.id, username: d.username, name: d.name, scopes });
+    }
+
+    // eigene Instanzen via UMA-Dance als Owner holen
+    const instances = [];
+    for (const t of BLACKLISTABLE) {
+      const r = await umaFetch(req.session, `${t}?patient=${patientId}`);
+      for (const e of (r.status === 200 ? r.payload?.entry || [] : [])) {
+        const r0 = e.resource;
+        if (!r0?.id) continue;
+        const label = r0.code?.text || r0.code?.coding?.[0]?.display || r0.medication?.concept?.text || t;
+        instances.push({ type: t, id: r0.id, label });
+      }
+    }
+    // Blacklist je Arzt aufloesen
+    for (const d of docState) {
+      d.blacklist = instances
+        .filter((i) => blacklist.has(`Blacklist-${patientId}-${i.type}-${i.id}-${d.id}`))
+        .map((i) => `${i.type}/${i.id}`);
+    }
+
+    res.json({
+      patientId,
+      types: Object.keys(READ_SCOPE_BY_TYPE).map((k) => ({ key: k, label: TYPE_LABELS[k] })),
+      doctors: docState,
+      instances,
+    });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// --- Scopes fuer einen Arzt setzen (leere Liste = komplett entziehen) ---
+app.post('/api/access/grant', async (req, res) => {
+  const patientId = sessionOwner(req, res);
+  if (!patientId) return;
+  const { doctorId, scopes } = req.body || {};
+  const types = Array.isArray(scopes) ? scopes.filter((t) => READ_SCOPE_BY_TYPE[t]) : [];
+  try {
+    const adminToken = await getAdminToken();
+    const doc = (await listDoctors(adminToken)).find((d) => d.id === doctorId);
+    if (!doc) return res.status(400).json({ error: 'Unbekannter Arzt' });
+
+    const permName = `Permission-Patient${patientId}-${doc.username}`;
+    const trustName = `TrustList-Patient${patientId}-${doc.username}`;
+    if (types.length === 0) {
+      await deletePolicyByName(adminToken, permName);
+      await deletePolicyByName(adminToken, trustName);
+      return res.json({ ok: true, scopes: [] });
+    }
+    const rsid = (await listKeycloakPatients(adminToken)).find((p) => p.id === patientId)?.rsid;
+    if (!rsid) return res.status(404).json({ error: 'Eigene Ressource nicht gefunden' });
+
+    const scopeIdMap = await getScopeIds(adminToken);
+    const scopeIds = types.map((t) => scopeIdMap[READ_SCOPE_BY_TYPE[t]]).filter(Boolean);
+    const trustPolId = await ensureUserPolicy(adminToken, trustName, doc.id);
+    const rolePol = await findPolicyByName(adminToken, 'RolePolicy-Doctor');
+    const policyIds = rolePol ? [trustPolId, rolePol.id] : [trustPolId];
+    await upsertScopePermission(adminToken, permName, rsid, scopeIds, policyIds);
+    res.json({ ok: true, scopes: types });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// --- Einzelne Instanz fuer einen Arzt sperren/entsperren (Blacklist) ---
+app.post('/api/access/blacklist', async (req, res) => {
+  const patientId = sessionOwner(req, res);
+  if (!patientId) return;
+  const { doctorId, resourceType, resourceId, blocked } = req.body || {};
+  if (!BLACKLISTABLE.includes(resourceType) || !resourceId) {
+    return res.status(400).json({ error: 'Ungueltige Ressource' });
+  }
+  try {
+    const adminToken = await getAdminToken();
+    const doc = (await listDoctors(adminToken)).find((d) => d.id === doctorId);
+    if (!doc) return res.status(400).json({ error: 'Unbekannter Arzt' });
+
+    const name = `Blacklist-${patientId}-${resourceType}-${resourceId}-${doc.id}`;
+    if (blocked) await ensureUserPolicy(adminToken, name, doc.id);
+    else await deletePolicyByName(adminToken, name);
+    res.json({ ok: true, blocked: !!blocked });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
   }
 });
 

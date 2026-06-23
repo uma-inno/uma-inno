@@ -1,99 +1,67 @@
 # 1. Setup Guide
 
+> **The authoritative setup guide is [`../SETUP.md`](../SETUP.md)** (German). It covers the
+> Keycloak version pin, the mandatory seed/authz steps, the HAPI ↔ Keycloak startup-order
+> caveat, verification, re-export and reset. This page is only a short English pointer.
+
 ## Prerequisites
 
-- **Docker Desktop** (with Docker Compose)
-- **Available ports**: 5432, 5433, 8080, 8081
+- **Docker** + **Docker Compose** (daemon running)
+- **PowerShell** (Windows) or **pwsh** (Linux/macOS) for the setup/seed scripts
+- Free ports: `8080` (Keycloak), `8081` (HAPI FHIR), `3000` (frontend), `5432`/`5433` (PostgreSQL)
 
----
+> **Keycloak version:** the Compose file pins `quay.io/keycloak/keycloak:26.6.3` on purpose —
+> it must match the `keycloakVersion` of `fhir-auth-realm-export.json`. An older image rejects
+> the import (`Unrecognized field "..."`). Do **not** use `:latest`.
 
-## Installation
-
-### Step 1: Start Services
+## Steps (summary)
 
 ```bash
+# 1. Start the stack
 cd uma-inno/hapi-jpa
-docker-compose up -d
-```
+docker compose up -d --build
 
-This starts:
-- **Keycloak** on port 8080 (Authorization Server)
-- **HAPI FHIR Server** on port 8081
-- **PostgreSQL** on ports 5432 (FHIR) and 5433 (Keycloak)
+# 2. Wait until Keycloak answers, then restart HAPI so it can initialise its Keycloak client
+curl -s http://localhost:8080/realms/FHIR-Auth/.well-known/uma2-configuration
+docker compose restart hapi-fhir-jpaserver-start
 
-### Step 2: Wait for Startup
-
-Services need ~60 seconds to fully start. Check status:
-
-```bash
-docker-compose ps
-```
-
-All services should show "Up" or "healthy".
-
-### Step 3: Create Test Data
-
-```bash
+# 3. Seed demo data and build the authorization config (BOTH mandatory)
 cd ../keycloak-config
-./create-fhir-resources.sh
-./create-test-permissions.sh
+.\seed-fhir-data.ps1          # alice/bernd/clara (Patient/1, /7, /11) + dr.smith/dr.bob + clinical resources
+.\setup-smart-v2-authz.ps1    # owner permissions on the registered Patient resources
 ```
 
-This creates test patients (Alice, Jan) with clinical data and grants doctors access permissions.
-
----
+The realm import provides only the base realm (users, roles, client, SMART-v2 scopes,
+role/user policies). The Patient resources and owner permissions are created at runtime by the
+two scripts above. **Doctor access is not seeded** — patients grant it at runtime through the
+frontend (see [3-Keycloak-Configuration.md](3-Keycloak-Configuration.md#patientengesteuerte-freigabe-frontend)).
+See [`../SETUP.md`](../SETUP.md) for the full rationale and troubleshooting.
 
 ## Verification
 
-### Check FHIR Server
 ```bash
-curl http://localhost:8081/fhir/metadata
+# Login through the frontend proxy (it performs the UMA dance), then access a resource:
+curl -s -c cj.txt -X POST http://localhost:3000/api/login \
+  -H "Content-Type: application/json" -d '{"username":"alice","password":"alice123"}'
+curl -s -b cj.txt -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/fhir/Patient/1   # 200 (owner)
 ```
-**Expected:** JSON CapabilityStatement response
 
-### Check Keycloak
-Open http://localhost:8080 and login with `admin` / `admin`
+| User | Path | Status |
+|------|------|--------|
+| alice | `Patient/1` | 200 (owner) |
+| bernd | `Patient/7` | 200 (owner) |
+| bernd | `Patient/1` | 403 (foreign patient) |
+| dr.smith | `Condition?patient=1` | 403 → 200 **after** alice grants it in the UI |
 
-### Test UMA Flow
-```bash
-curl -i http://localhost:8081/fhir/Patient
-```
-**Expected:** 401 response with `WWW-Authenticate: UMA` header containing a permission ticket
+Or open **http://localhost:3000** and log in as alice/bernd/clara or dr.smith/dr.bob. In the
+"Als Patient" view a patient can grant/revoke doctor access and block individual entries.
 
----
+## Run Locally (without Docker)
 
-## Development
-
-### Run Locally (without Docker)
 ```bash
 cd hapi-jpa
-mvn clean spring-boot:run
+mvn clean spring-boot:run        # serves http://localhost:8081/fhir
 ```
 
-### Build WAR
-```bash
-mvn clean package -DskipTests
-```
-
-### View Logs
-```bash
-docker-compose logs -f hapi-fhir-jpaserver-start
-```
-
----
-
-## Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `hapi-jpa/docker-compose.yml` | Docker service definitions |
-| `hapi-jpa/src/main/resources/application.yaml` | FHIR server configuration |
-| `keycloak-config/keycloak-files/fhir-auth-full.json` | Keycloak realm export |
-
----
-
-## Next Steps
-
-1. Read [2-Technical-Overview.md](2-Technical-Overview.md) to understand the architecture
-2. Use [curl-testing-commands.md](../keycloak-config/curl-testing-commands.md) to test the UMA flow
-3. Refer to [4-API-Reference.md](4-API-Reference.md) for API details
+For local runs, point `uma.authorization-server-uri` / `keycloak.auth-server-url` in
+`application.yaml` at `http://localhost:8080` instead of `http://keycloak:8080`.

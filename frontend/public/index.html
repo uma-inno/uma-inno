@@ -44,6 +44,10 @@
 
     <main class="layout">
       <aside class="sidebar">
+        <div id="view-switch" class="view-switch hidden">
+          <button id="view-patient" class="view-btn" type="button">🧑 Als Patient</button>
+          <button id="view-doctor" class="view-btn" type="button">🩺 Als Arzt</button>
+        </div>
         <label id="patient-select-wrap" class="patient-select hidden">Patient auswählen
           <select id="patient-select"></select>
         </label>
@@ -57,6 +61,11 @@
       </aside>
 
       <section class="content">
+        <div id="access-panel" class="access-panel hidden">
+          <h3>Zugriffsverwaltung — meine Freigaben</h3>
+          <p class="hint">Gib Ärzten Lesezugriff auf deine Daten frei oder sperre einzelne Einträge. Änderungen wirken sofort.</p>
+          <div id="access-doctors"></div>
+        </div>
         <div id="flow" class="flow hidden">
           <h3>UMA-Flow</h3>
           <ol id="flow-steps"></ol>

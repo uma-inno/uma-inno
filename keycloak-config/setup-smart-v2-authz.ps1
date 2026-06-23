@@ -58,6 +58,20 @@ foreach ($u in @(
     Write-Host "User $($u.name) angelegt (Rolle Patient)"
 }
 
+# --- 0b. Aerzte sind auch Patienten: Patient-Rolle zusaetzlich zuweisen ---
+# dr.smith/dr.bob existieren bereits (aus dem Import) mit Doctor-Rolle; sie bekommen
+# zusaetzlich die Patient-Rolle, damit sie einen eigenen Datensatz besitzen koennen.
+foreach ($u in @('dr.smith','dr.bob')) {
+    $usr = Invoke-RestMethod -Uri "$base/users?username=$u&exact=true" -Headers $H
+    if ($usr.Count -eq 0) { continue }
+    $cur = Invoke-RestMethod -Uri "$base/users/$($usr[0].id)/role-mappings/realm" -Headers $H
+    if (-not ($cur | Where-Object { $_.name -eq 'Patient' })) {
+        $roleBody = ConvertTo-Json @(@{ id = $patientRole.id; name = 'Patient' })
+        Invoke-RestMethod -Method Post -Uri "$base/users/$($usr[0].id)/role-mappings/realm" -Headers $H -ContentType 'application/json' -Body $roleBody | Out-Null
+        Write-Host "Rolle Patient an $u zugewiesen"
+    }
+}
+
 # --- 1. uma_protection Client Scope (Default fuer fhir-client) ---
 $umaCs = (Invoke-RestMethod -Uri "$base/client-scopes" -Headers $H) | Where-Object { $_.name -eq 'uma_protection' }
 if (-not $umaCs) {
@@ -111,13 +125,15 @@ function Ensure-Policy([string]$name, [string]$type, [hashtable]$body) {
 }
 
 $polDoctor = Ensure-Policy 'RolePolicy-Doctor' 'role' @{ name='RolePolicy-Doctor'; type='role'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; roles=@(@{ id=$doctorRole.id; required=$true }) }
-$polBob    = Ensure-Policy 'TrustList-Patient1-DrBob'   'user' @{ name='TrustList-Patient1-DrBob';   type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.bob) }
-$polSmith  = Ensure-Policy 'TrustList-Patient1-DrSmith' 'user' @{ name='TrustList-Patient1-DrSmith'; type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.smith) }
+# TrustList-Policies fuer Aerzte werden NICHT mehr vorab angelegt - der Proxy erstellt sie
+# pro Freigabe dynamisch (TrustList-Patient<id>-<arzt>), wenn der Patient Zugriff gewaehrt.
 $polAlice  = Ensure-Policy 'UserPolicy-Alice' 'user' @{ name='UserPolicy-Alice'; type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.alice) }
 $ownerPolicies = @{
-    bernd = Ensure-Policy 'UserPolicy-Owner-bernd' 'user' @{ name='UserPolicy-Owner-bernd'; type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.bernd) }
-    clara = Ensure-Policy 'UserPolicy-Owner-clara' 'user' @{ name='UserPolicy-Owner-clara'; type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.clara) }
-    alice = $polAlice
+    bernd   = Ensure-Policy 'UserPolicy-Owner-bernd' 'user' @{ name='UserPolicy-Owner-bernd'; type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.bernd) }
+    clara   = Ensure-Policy 'UserPolicy-Owner-clara' 'user' @{ name='UserPolicy-Owner-clara'; type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.clara) }
+    drsmith = Ensure-Policy 'UserPolicy-Owner-drsmith' 'user' @{ name='UserPolicy-Owner-drsmith'; type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.smith) }
+    drbob   = Ensure-Policy 'UserPolicy-Owner-drbob' 'user' @{ name='UserPolicy-Owner-drbob'; type='user'; logic='POSITIVE'; decisionStrategy='UNANIMOUS'; users=@($ids.bob) }
+    alice   = $polAlice
 }
 
 # --- 6. Permissions je Patient-Ressource ---
@@ -145,7 +161,7 @@ if (-not $patientResources) {
     Write-Host "HINWEIS: Noch keine Patient/<id>-Ressourcen in Keycloak registriert."
     Write-Host "-> Zuerst .\seed-fhir-data.ps1 ausfuehren, dann dieses Skript erneut starten."
 } else {
-    $ownerToUser = @{ "$($ids.alice)" = 'alice'; "$($ids.bernd)" = 'bernd'; "$($ids.clara)" = 'clara' }
+    $ownerToUser = @{ "$($ids.alice)" = 'alice'; "$($ids.bernd)" = 'bernd'; "$($ids.clara)" = 'clara'; "$($ids.smith)" = 'drsmith'; "$($ids.bob)" = 'drbob' }
     foreach ($pr in $patientResources) {
         $full = Invoke-RestMethod -Uri "$authz/resource/$($pr._id)" -Headers $H
         $num = $pr.name -replace '^Patient/', ''
@@ -159,11 +175,9 @@ if (-not $patientResources) {
 
         $ownerUser = $ownerToUser["$($full.owner.id)"]
         if ($ownerUser -eq 'alice') {
-            # Alice (Owner von Patient/1): voller Zugriff auf alle Typen
+            # Alice (Owner von Patient/1): voller Eigenzugriff. Arzt-Freigaben werden NICHT mehr
+            # vorgeseedet - der Patient vergibt sie zur Laufzeit ueber die Zugriffsverwaltung im Frontend.
             Ensure-ScopePermission "Permission-Patient$num-Alice-Full" $full._id $smartScopes @($polAlice)
-            # plus die beiden Aerzte gemaess Demo-Szenario
-            Ensure-ScopePermission "Permission-Patient$num-DrBob-Condition" $full._id @('patient/Condition.rs') @($polBob, $polDoctor)
-            Ensure-ScopePermission "Permission-Patient$num-DrSmith-Full"    $full._id @('patient/Patient.r')    @($polSmith, $polDoctor)
         } elseif ($ownerUser) {
             # bernd/clara: nur Owner-Vollzugriff (keine Arzt-Freigaben -> Demo fuer access_denied)
             Ensure-ScopePermission "Permission-Patient$num-Owner-Full" $full._id $smartScopes @($ownerPolicies[$ownerUser])
