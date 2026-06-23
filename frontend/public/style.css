@@ -127,6 +127,32 @@ input:focus { outline: none; border-color: var(--primary); }
   border-radius: 12px;
   padding: 1.25rem;
 }
+.view-switch {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  background: var(--bg);
+  padding: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.view-btn {
+  flex: 1;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.view-btn:hover { color: var(--text); }
+.view-btn.active {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
 .patient-select {
   display: block;
   font-size: 0.8rem;
@@ -197,6 +223,31 @@ input:focus { outline: none; border-color: var(--primary); }
   margin-right: 0.3rem;
   color: #7dd3fc;
 }
+
+/* ---------- Zugriffsverwaltung ---------- */
+.access-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.access-panel h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+.access-doc { margin-bottom: 0.75rem; }
+.scope-row { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-top: 0.6rem; }
+.scope-toggle, .bl-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.scope-toggle input, .bl-row input { width: auto; margin: 0; cursor: pointer; }
+.bl-list { display: grid; gap: 0.45rem; margin-top: 0.6rem; }
+.bl-row { font-size: 0.82rem; }
+.access-doc details summary { margin-top: 0.6rem; color: var(--text-dim); font-size: 0.82rem; }
 
 /* ---------- Result ---------- */
 .result-panel {

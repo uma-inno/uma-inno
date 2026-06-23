@@ -36,6 +36,14 @@ The demo frontend (`http://localhost:3000`) runs the UMA dance server-side. Usef
 | `GET /api/fhir/<fhirPath>` | Generic FHIR proxy with full UMA dance → `{status, steps, resource}` |
 | `GET /api/me` | Current session (roles, patient context) |
 | `POST /api/logout` | Destroys the session |
+| `GET /api/access/state` | Eigener Freigabe-Stand: Ärzte + gewährte Lese-Scopes + Blacklist je Instanz (nur Owner) |
+| `POST /api/access/grant` `{doctorId, scopes[]}` | Lese-Scopes pro Typ für einen Arzt setzen; leere Liste = entziehen (nur Owner) |
+| `POST /api/access/blacklist` `{doctorId, resourceType, resourceId, blocked}` | Einzelne Instanz für einen Arzt sperren/entsperren (nur Owner) |
+
+> Die `/api/access/*`-Endpunkte sind die **patientengesteuerte** Freigabeverwaltung: Der Proxy
+> mutiert Keycloak per Admin-Token, nachdem er geprüft hat, dass der eingeloggte User Owner der
+> eigenen Ressource ist (Patient-ID aus der Session, nie aus dem Request). Details:
+> [3-Keycloak-Configuration.md](3-Keycloak-Configuration.md#patientengesteuerte-freigabe-frontend).
 
 ```bash
 curl -s -c cj.txt -X POST http://localhost:3000/api/login \

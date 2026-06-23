@@ -67,8 +67,8 @@ cd ../keycloak-config
 | alice | alice123 | Patient | Patient/1 (owner) |
 | bernd | bernd123 | Patient | Patient/7 (owner) |
 | clara | clara123 | Patient | Patient/11 (owner) |
-| dr.smith | smith123 | Doctor | on Alice's trust list (`patient/Patient.r`) |
-| dr.bob | bob123 | Doctor | on Alice's trust list (`patient/Condition.rs`) |
+| dr.smith | smith123 | Doctor + Patient | eigener Datensatz; Zugriff auf andere wird vom Patienten freigegeben |
+| dr.bob | bob123 | Doctor + Patient | eigener Datensatz; Zugriff auf andere wird vom Patienten freigegeben |
 | jan | _(from import)_ | Administrator | — |
 
 ---

@@ -30,7 +30,7 @@ $adminTok = (Invoke-RestMethod -Method Post -Uri "$KeycloakUrl/realms/master/pro
     -Body "grant_type=password&client_id=admin-cli&username=admin&password=admin").access_token
 $adminH = @{ Authorization = "Bearer $adminTok" }
 $UUID = @{}
-foreach ($u in @('alice','bernd','clara')) {
+foreach ($u in @('alice','bernd','clara','dr.smith','dr.bob')) {
     $found = Invoke-RestMethod -Uri "$KeycloakUrl/admin/realms/FHIR-Auth/users?username=$u&exact=true" -Headers $adminH
     if ($found.Count -eq 0) { throw "User '$u' fehlt im Realm. Zuerst setup-smart-v2-authz.ps1 ausfuehren." }
     $UUID[$u] = $found[0].id
@@ -110,8 +110,24 @@ New-Condition  $clara 'Hypothyreose' 'problem-list-item'
 New-Medication $clara 'Levothyroxin 75ug'
 New-Allergy    $clara 'Latex'
 
+# Aerzte sind auch Patienten: eigener Datensatz, damit der "Als Patient"-Umschalter
+# im Frontend Daten zeigt. Owner = Keycloak-UUID des jeweiligen Arztes.
+Write-Host "[5] Patient dr.smith (Arzt mit eigenem Datensatz)..."
+$drsmith = New-Patient $UUID['dr.smith'] 'Smith' 'John' 'male' '1980-05-14'
+New-Condition  $drsmith 'Hypertension' 'problem-list-item'
+New-Condition  $drsmith 'Migraine'     'encounter-diagnosis'
+New-Medication $drsmith 'Ibuprofen 400mg'
+New-Allergy    $drsmith 'Aspirin'
+
+Write-Host "[6] Patient dr.bob (Arzt mit eigenem Datensatz)..."
+$drbob = New-Patient $UUID['dr.bob'] 'Anderson' 'Bob' 'male' '1975-09-30'
+New-Condition  $drbob 'Hypertension' 'problem-list-item'
+New-Condition  $drbob 'Migraine'     'encounter-diagnosis'
+New-Medication $drbob 'Ibuprofen 400mg'
+New-Allergy    $drbob 'Aspirin'
+
 Write-Host ""
-Write-Host "Fertig. Patienten angelegt: alice=Patient/$alice, bernd=Patient/$bernd, clara=Patient/$clara"
+Write-Host "Fertig. Patienten angelegt: alice=Patient/$alice, bernd=Patient/$bernd, clara=Patient/$clara, dr.smith=Patient/$drsmith, dr.bob=Patient/$drbob"
 Write-Host "WICHTIG: Die FHIR-IDs sind NICHT zwingend 1/152/153 (haengen von der Anlagereihenfolge ab)."
 Write-Host "Die Owner-Permissions in Keycloak referenzieren konkrete Patient/<id>-Ressourcennamen -"
 Write-Host "ggf. die Keycloak-Permissions an die tatsaechlichen IDs anpassen (siehe README)."

@@ -125,27 +125,32 @@ entfernt es zusätzlich Altobjekte aus früheren Importen.
 > den UMA-Dance (Access Token → 401 + Permission Ticket → RPT → Zugriff) serverseitig durchführt.
 
 ```bash
-# Login (Session-Cookie -> cj.txt), danach FHIR-Zugriff über den Proxy:
+# Login (Session-Cookie -> cj.txt), danach FHIR-Zugriff über den Proxy (alice = Owner):
 curl -s -c cj.txt -X POST http://localhost:3000/api/login \
-  -H "Content-Type: application/json" -d '{"username":"dr.smith","password":"smith123"}'
+  -H "Content-Type: application/json" -d '{"username":"alice","password":"alice123"}'
 curl -s -b cj.txt -o NUL -w "%{http_code}\n" http://localhost:3000/api/fhir/Patient/1   # -> 200
 ```
 
-Erwartete Ergebnisse:
+**Owner-Zugriff** (immer verfügbar, jeder Patient auf sich selbst):
 
 | User | Pfad | Status | Grund |
 |---|---|---|---|
-| dr.smith | `Patient/1` | **200** | TrustList von Alice + `patient/Patient.r` |
-| dr.bob | `Patient/1` | **401** | nur `Condition.rs` → kein Stammdaten-Lesen |
-| dr.bob | `Condition?patient=1` | **200** | darf Alices Conditions lesen |
-| dr.bob | `Patient/7` | **403** | keine TrustList bei bernd → `access_denied` |
 | alice | `Patient/1` | **200** | Owner, Vollzugriff |
 | bernd | `Patient/7` | **200** | Owner von Patient/7 |
 | bernd | `Patient/1` | **403** | kein Zugriff auf fremden Patienten |
 | clara | `Patient/11` | **200** | Owner von Patient/11 |
 
-Oder im Browser: **http://localhost:3000** — Login als alice/bernd/clara (Patient) oder
-dr.smith/dr.bob (Arzt). Die UMA-Schritte und die RPT-Scopes werden in der UI sichtbar.
+**Arzt-Zugriff** ist standardmäßig **leer** — er entsteht erst, wenn der Patient ihn im Frontend
+freigibt (Sicht „Als Patient" → „Zugriffsverwaltung"). Beispiel nach Freigabe „Diagnosen" durch alice:
+
+| User | Pfad | vor Freigabe | nach Freigabe |
+|---|---|---|---|
+| dr.smith | `Condition?patient=1` | **403** | **200** |
+| dr.smith | `Patient/1` (Stammdaten) | **403** | weiterhin **401/403**, solange „Stammdaten" nicht freigegeben |
+
+Oder im Browser: **http://localhost:3000** — Login als alice/bernd/clara oder dr.smith/dr.bob.
+In der „Als Patient"-Sicht erscheint die **Zugriffsverwaltung**, in der der Patient pro Arzt
+Lese-Scopes freigibt und einzelne Einträge sperrt. Die UMA-Schritte/RPT-Scopes bleiben sichtbar.
 
 ---
 

@@ -80,14 +80,15 @@ The summary is **permission-filtered**, reusing the same enforcement stages as t
 ### Example Scenario (demo data)
 
 **Alice's data (Patient/1):** Conditions (Hypertension, Diabetes, Migraine), MedicationStatement
-(Metformin), AllergyIntolerance (Penicillin).
+(Metformin), AllergyIntolerance (Penicillin). Doctor access is **patient-controlled** — the
+results below assume alice has granted the respective scopes in the frontend.
 
 | Requester | Scopes on Patient/1 | `$summary` result |
 |-----------|---------------------|-------------------|
 | **alice** (owner) | all 5 | Composition + Patient + Problems + Allergies + Medications |
 | **dr.smith** | `patient/Patient.r` | Composition + Patient demographics only (no clinical sections) |
 | **dr.bob** | `patient/Condition.rs` | Composition + Patient + Problems (Conditions) only |
-| **dr.bob** on Patient/7 | _none_ | `403` (no read scope → ticket/RPT denied) |
+| **dr.bob** (no grant) | _none_ | `403` (no read scope → ticket/RPT denied) |
 
 This ensures patients keep control over which parts of their medical record each provider can see.
 

@@ -12,7 +12,7 @@
 
 | Component | Purpose |
 |-----------|---------|
-| **Demo Frontend** | Node/Express proxy + static UI; holds the `client_secret` and runs the UMA dance server-side |
+| **Demo Frontend** | Node/Express proxy + static UI; holds the `client_secret` and runs the UMA dance server-side; bietet die patientengesteuerte Zugriffsverwaltung |
 | **HAPI FHIR Server** | FHIR R5 REST API with UMA protection (resource server) |
 | **Keycloak** | UMA 2.0 Authorization Server (realm `FHIR-Auth`, tokens, policies); pinned to **26.6.3** |
 | **PostgreSQL** | Separate databases for FHIR resources and Keycloak |
@@ -122,6 +122,11 @@ Registers resources in Keycloak when created:
 3. **No creator permissions are granted** — third-party access is given exclusively through the
    patient-controlled trust-list permissions (`grantCreatorPermissions` was removed).
 
+> **Patientengesteuerte Freigabe:** Trust-List, Scopes und Blacklist werden **nicht** mehr
+> vorgeseedet, sondern vom Patienten zur Laufzeit über das Frontend verwaltet
+> (`/api/access/*` im Proxy → Keycloak-Permissions/Marker-Policies). Siehe
+> [3-Keycloak-Configuration.md](3-Keycloak-Configuration.md#patientengesteuerte-freigabe-frontend).
+
 ---
 
 ## Resource Ownership
@@ -132,9 +137,9 @@ Registers resources in Keycloak when created:
 | Condition, AllergyIntolerance, MedicationStatement | the referenced patient's Keycloak UUID |
 
 Ownership is expressed via Keycloak **user policies** (`UserPolicy-Alice`,
-`UserPolicy-Owner-bernd`, `UserPolicy-Owner-clara`) attached to the per-patient scope
-permissions. (An earlier JavaScript "Owner Policy" provider JAR is still mounted in Compose but is
-**not used** by the current realm.)
+`UserPolicy-Owner-bernd`, `UserPolicy-Owner-clara`, …) attached to the per-patient Owner-Full
+scope permission. (An earlier JavaScript "Owner Policy" provider JAR is still mounted in Compose
+but is **not used** by the current realm.)
 
 ---
 
@@ -173,7 +178,8 @@ The FHIR server extracts `authorization.permissions` and checks that the request
 | Doctor | Patient, Condition, AllergyIntolerance, MedicationStatement | Granted resources (via UMA) | No |
 | Administrator | All | All | All |
 
-Read/update/delete are governed by the UMA scope check, not by role alone.
+Read/update/delete are governed by the UMA scope check, not by role alone. Welche Ärzte welche
+Daten lesen dürfen, gibt der jeweilige Patient zur Laufzeit über das Frontend frei.
 
 ---
 

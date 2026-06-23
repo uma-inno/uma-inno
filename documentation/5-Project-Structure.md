@@ -70,5 +70,5 @@
 ### Frontend
 | File | Purpose |
 |------|---------|
-| `frontend/server.js` | Express proxy; holds `client_secret`, runs the UMA dance (`umaFetch`) |
-| `frontend/public/` | Static demo UI (login, patient context, UMA-step display) |
+| `frontend/server.js` | Express proxy; holds `client_secret`, runs the UMA dance (`umaFetch`); patient access-management endpoints (`/api/access/*`) |
+| `frontend/public/` | Static demo UI (login, patient context toggle, UMA-step display, Zugriffsverwaltung) |

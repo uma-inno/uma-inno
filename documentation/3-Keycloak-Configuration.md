@@ -20,8 +20,8 @@
 | alice | alice123 | Patient | Patient/1 (owner) |
 | bernd | bernd123 | Patient | Patient/7 (owner) |
 | clara | clara123 | Patient | Patient/11 (owner) |
-| dr.smith | smith123 | Doctor | on Alice's trust list (`patient/Patient.r`) |
-| dr.bob | bob123 | Doctor | on Alice's trust list (`patient/Condition.rs`) |
+| dr.smith | smith123 | Doctor + Patient | besitzt eigenen Datensatz; Zugriff auf fremde Patienten wird vom Patienten zur Laufzeit freigegeben (Standard: keiner) |
+| dr.bob | bob123 | Doctor + Patient | besitzt eigenen Datensatz; Zugriff auf fremde Patienten wird vom Patienten zur Laufzeit freigegeben (Standard: keiner) |
 | jan | _(from import)_ | Administrator | — |
 
 ### Get User Token
@@ -63,6 +63,8 @@ seeded. Owner = the patient's Keycloak user; `ownerManagedAccess = false`.
 | `Patient/1` | alice |
 | `Patient/7` | bernd |
 | `Patient/11` | clara |
+| `Patient/<id>` | dr.smith (eigener Datensatz) |
+| `Patient/<id>` | dr.bob (eigener Datensatz) |
 
 ## Policies
 
@@ -72,26 +74,56 @@ seeded. Owner = the patient's Keycloak user; `ownerManagedAccess = false`.
 | `UserPolicy-Alice` | User | Alice (owner of Patient/1) |
 | `UserPolicy-Owner-bernd` | User | Bernd (owner of Patient/7) |
 | `UserPolicy-Owner-clara` | User | Clara (owner of Patient/11) |
-| `TrustList-Patient1-DrBob` | User | Dr. Bob, granted by Alice |
-| `TrustList-Patient1-DrSmith` | User | Dr. Smith, granted by Alice |
+| `UserPolicy-Owner-drsmith` / `-drbob` | User | dr.smith / dr.bob (eigener Datensatz) |
+
+> Trust-List-Policies für Ärzte werden **nicht** mehr vorgeseedet — der Patient legt sie zur
+> Laufzeit über das Frontend an: `TrustList-Patient<id>-<doctor>` (siehe „Patientengesteuerte Freigabe").
 
 ## Permissions (type: scope, AFFIRMATIVE)
+
+Vorgeseedet werden **nur** die Owner-Full-Permissions (Eigenzugriff jedes Patienten auf sich selbst):
 
 | Name | Resource | Scopes | Policies |
 |------|----------|--------|----------|
 | `Permission-Patient1-Alice-Full` | Patient/1 | all 5 | UserPolicy-Alice |
-| `Permission-Patient1-DrBob-Condition` | Patient/1 | `patient/Condition.rs` | TrustList-DrBob + RolePolicy-Doctor |
-| `Permission-Patient1-DrSmith-Full` | Patient/1 | `patient/Patient.r` | TrustList-DrSmith + RolePolicy-Doctor |
 | `Permission-Patient7-Owner-Full` | Patient/7 | all 5 | UserPolicy-Owner-bernd |
 | `Permission-Patient11-Owner-Full` | Patient/11 | all 5 | UserPolicy-Owner-clara |
+| `Permission-Patient<id>-Owner-Full` | dr.smith / dr.bob | all 5 | UserPolicy-Owner-drsmith / -drbob |
 
-**Demo takeaway:** `dr.smith` can read `Patient/1` (has `patient/Patient.r`), `dr.bob` cannot
-(only `patient/Condition.rs`). `bernd`/`clara` see only their own data; no doctor has access to
-them (no trust list → `access_denied`). This demonstrates patient-controlled authorization.
+**Arzt-Freigaben** sind **nicht** vorgeseedet — sie entstehen erst, wenn ein Patient sie im
+Frontend vergibt (siehe „Patientengesteuerte Freigabe").
+
+**Demo takeaway:** Zu Beginn hat **kein** Arzt Zugriff auf fremde Patienten (`access_denied`).
+Der Patient gibt im Frontend gezielt frei — z.B. alice gibt dr.smith „Diagnosen"
+(`patient/Condition.rs`) → dr.smith liest dann alices Conditions; sperrt alice eine einzelne
+Condition für dr.smith (Blacklist), fällt genau diese aus dem Ergebnis. Das demonstriert die
+patientengesteuerte Autorisierung.
 
 > **Decision Strategy = AFFIRMATIVE (not Unanimous):** several permissions share the same scope;
 > with Unanimous, a DENY from an unrelated permission would block access. "Unanimous" only applies
 > *within* a single permission (e.g. trust list AND Doctor role).
+
+---
+
+## Patientengesteuerte Freigabe (Frontend)
+
+Der Patient verwaltet die Arzt-Zugriffe selbst über das Demo-Frontend (Sicht „Als Patient", nur
+auf den **eigenen** Datensatz). Der Proxy mutiert Keycloak per Admin-Token, **nachdem** er
+serverseitig geprüft hat, dass der eingeloggte User Owner der Ziel-Ressource ist
+(`session.ownPatientId` — die Patient-ID kommt nie aus dem Request).
+
+| Aktion | Proxy-Endpoint | Keycloak-Objekt |
+|--------|----------------|------------------|
+| Lese-Scope je Typ freigeben/entziehen | `POST /api/access/grant` | `Permission-Patient<id>-<doctor>` (+ `TrustList-Patient<id>-<doctor>`, gebunden an `RolePolicy-Doctor`); leere Auswahl ⇒ Permission gelöscht |
+| Einzelne Instanz sperren/entsperren | `POST /api/access/blacklist` | Marker-Policy `Blacklist-<patId>-<resType>-<resId>-<docId>` |
+| aktuellen Freigabe-Stand lesen | `GET /api/access/state` | — |
+
+**Wirkung:** Trust-List-/Scope-Änderungen greifen beim nächsten RPT-Tausch (der Proxy tauscht pro
+Anfrage frisch → quasi sofort); Blacklist-Änderungen ≤ 30 s (Cache in `UmaBlacklistService`).
+
+> **Sicherheits-/UMA-Limitation:** Die Mutationen laufen über das `admin/admin`-Token des Proxys
+> (nach Owner-Prüfung). Produktiv wäre UMA-natives Owner-Managed-Access (`ownerManagedAccess=true`
+> + Keycloak Account-API mit dem **eigenen** Token) der saubere Weg; hier bewusst vereinfacht.
 
 ---
 

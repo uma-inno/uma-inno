@@ -27,32 +27,34 @@ docker compose restart hapi-fhir-jpaserver-start
 
 # 3. Seed demo data and build the authorization config (BOTH mandatory)
 cd ../keycloak-config
-.\seed-fhir-data.ps1          # alice/bernd/clara (Patient/1, /7, /11) + clinical resources
-.\setup-smart-v2-authz.ps1    # scope permissions on the registered Patient resources
+.\seed-fhir-data.ps1          # alice/bernd/clara (Patient/1, /7, /11) + dr.smith/dr.bob + clinical resources
+.\setup-smart-v2-authz.ps1    # owner permissions on the registered Patient resources
 ```
 
 The realm import provides only the base realm (users, roles, client, SMART-v2 scopes,
-role/user policies). The Patient resources and scope permissions are created at runtime by the
-two scripts above — see [`../SETUP.md`](../SETUP.md) for the full rationale and troubleshooting.
+role/user policies). The Patient resources and owner permissions are created at runtime by the
+two scripts above. **Doctor access is not seeded** — patients grant it at runtime through the
+frontend (see [3-Keycloak-Configuration.md](3-Keycloak-Configuration.md#patientengesteuerte-freigabe-frontend)).
+See [`../SETUP.md`](../SETUP.md) for the full rationale and troubleshooting.
 
 ## Verification
 
 ```bash
 # Login through the frontend proxy (it performs the UMA dance), then access a resource:
 curl -s -c cj.txt -X POST http://localhost:3000/api/login \
-  -H "Content-Type: application/json" -d '{"username":"dr.smith","password":"smith123"}'
-curl -s -b cj.txt -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/fhir/Patient/1   # 200
+  -H "Content-Type: application/json" -d '{"username":"alice","password":"alice123"}'
+curl -s -b cj.txt -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/fhir/Patient/1   # 200 (owner)
 ```
 
 | User | Path | Status |
 |------|------|--------|
-| dr.smith | `Patient/1` | 200 |
-| dr.bob | `Patient/1` | 401 (only `Condition.rs`) |
-| dr.bob | `Condition?patient=1` | 200 |
-| bernd | `Patient/7` | 200 |
-| bernd | `Patient/1` | 403 |
+| alice | `Patient/1` | 200 (owner) |
+| bernd | `Patient/7` | 200 (owner) |
+| bernd | `Patient/1` | 403 (foreign patient) |
+| dr.smith | `Condition?patient=1` | 403 → 200 **after** alice grants it in the UI |
 
-Or open **http://localhost:3000** and log in as alice/bernd/clara (Patient) or dr.smith/dr.bob (Doctor).
+Or open **http://localhost:3000** and log in as alice/bernd/clara or dr.smith/dr.bob. In the
+"Als Patient" view a patient can grant/revoke doctor access and block individual entries.
 
 ## Run Locally (without Docker)
 
