@@ -118,7 +118,9 @@ app.post('/api/login', async (req, res) => {
     res.json({
       username: req.session.username,
       roles: req.session.roles,
-      patientId: req.session.patientId,
+      ownPatientId: req.session.ownPatientId,
+      isDoctor: req.session.isDoctor,
+      isPatient: req.session.ownPatientId != null,
       patients: req.session.patients,
     });
   } catch (e) {
@@ -126,15 +128,17 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Bestimmt den Patientenkontext nach dem Login (Quelle: Keycloak-Authorization-Config):
-//  - Patient-User: der Patient, dessen Owner die eigene Keycloak-UUID (sub) ist.
-//    patientId gesetzt, patients enthaelt nur den eigenen Patienten.
-//  - Aerzte/Admin: kein eigener Patient (patientId = null); patients = alle Patienten
-//    zur Auswahl. Welche davon zugaenglich sind, entscheidet erst die UMA-Durchsetzung.
+// Bestimmt den Patientenkontext nach dem Login (Quelle: Keycloak-Authorization-Config).
+// Rollenagnostisch — ein User kann gleichzeitig Patient UND Arzt sein:
+//  - ownPatientId: der Patient, dessen Owner die eigene Keycloak-UUID (sub) ist
+//    (eigener Datensatz), sofern vorhanden. Wird IMMER ermittelt, egal welche Rollen.
+//  - isDoctor: hat die Doctor-Rolle -> darf die Patientenauswahl sehen.
+//  - patients: Auswahlliste. Fuer Aerzte alle Patienten, sonst nur der eigene.
+// Welche davon tatsaechlich zugaenglich sind, entscheidet erst die UMA-Durchsetzung.
 async function resolvePatientContext(session, sub) {
-  session.patientId = null;
+  session.ownPatientId = null;
+  session.isDoctor = session.roles.includes('Doctor');
   session.patients = [];
-  const isPatient = session.roles.includes('Patient') && !session.roles.includes('Doctor');
   try {
     const adminToken = await getAdminToken();
     if (!adminToken) {
@@ -144,17 +148,18 @@ async function resolvePatientContext(session, sub) {
     const all = await listKeycloakPatients(adminToken);
     const toEntry = (p) => ({ id: p.id, label: `${p.ownerName || 'Patient'} (Patient/${p.id})` });
 
-    if (isPatient) {
-      const own = all.find((p) => p.ownerId === sub);
-      if (own) {
-        session.patientId = own.id;
-        session.patients = [toEntry(own)];
-      }
-    } else {
-      // numerisch sortiert fuer stabile Reihenfolge
-      session.patients = all
-        .sort((a, b) => Number(a.id) - Number(b.id))
-        .map(toEntry);
+    // Eigenen Datensatz immer suchen (unabhaengig von Rollen)
+    const own = all.find((p) => p.ownerId === sub);
+    if (own) {
+      session.ownPatientId = own.id;
+    }
+
+    if (session.isDoctor) {
+      // Arzt-Sicht: alle Patienten zur Auswahl (numerisch sortiert)
+      session.patients = all.sort((a, b) => Number(a.id) - Number(b.id)).map(toEntry);
+    } else if (own) {
+      // reiner Patient: nur der eigene
+      session.patients = [toEntry(own)];
     }
   } catch (e) {
     console.warn('Patientenkontext konnte nicht aufgeloest werden:', e.message);
@@ -170,7 +175,9 @@ app.get('/api/me', (req, res) => {
   res.json({
     username: req.session.username,
     roles: req.session.roles,
-    patientId: req.session.patientId,
+    ownPatientId: req.session.ownPatientId,
+    isDoctor: req.session.isDoctor,
+    isPatient: req.session.ownPatientId != null,
     patients: req.session.patients,
   });
 });

@@ -30,29 +30,56 @@ function showApp(me) {
   setupPatientContext(me);
 }
 
-// Richtet den Patientenkontext ein: Patient-User bekommen fix ihren eigenen
-// Patienten (kein Selektor), Aerzte/Admin eine Auswahlliste.
+// Richtet den Patientenkontext ein. Rollenagnostisch:
+//  - Doppelrolle (Arzt + eigener Datensatz): Umschalter sichtbar, Default = Patient-Sicht
+//  - reiner Patient: keine Auswahl, fix eigener Datensatz
+//  - reiner Arzt (kein eigener Datensatz): keine Patient-Sicht, fix Arzt-Auswahl
+let ownPatientId = null;
+let isDoctor = false;
+
 function setupPatientContext(me) {
   patientList = me.patients || [];
+  ownPatientId = me.ownPatientId || null;
+  isDoctor = !!me.isDoctor;
+  const canBeBoth = isDoctor && ownPatientId;
+
+  $('#view-switch').classList.toggle('hidden', !canBeBoth);
+
+  if (ownPatientId) {
+    setViewMode('patient');        // hat eigene Daten -> startet in Patient-Sicht
+  } else {
+    setViewMode('doctor');         // reiner Arzt -> Auswahl
+  }
+}
+
+// Wechselt zwischen Patient-Sicht (eigener Datensatz) und Arzt-Sicht (Auswahlliste).
+function setViewMode(mode) {
   const wrap = $('#patient-select-wrap');
   const select = $('#patient-select');
-  const isPatient = me.roles.includes('Patient') && !me.roles.includes('Doctor');
+  $('#view-patient')?.classList.toggle('active', mode === 'patient');
+  $('#view-doctor')?.classList.toggle('active', mode === 'doctor');
 
-  if (isPatient || patientList.length <= 1) {
+  if (mode === 'patient' && ownPatientId) {
     wrap.classList.add('hidden');
-    currentPatientId = me.patientId || (patientList[0] && patientList[0].id) || null;
+    currentPatientId = ownPatientId;
   } else {
-    wrap.classList.remove('hidden');
+    // Arzt-Sicht: Auswahlliste anzeigen (sofern mehr als nur der eigene Patient)
+    wrap.classList.toggle('hidden', patientList.length <= 1);
     select.innerHTML = patientList
       .map((p) => `<option value="${p.id}">${p.label}</option>`)
       .join('');
     currentPatientId = patientList[0] ? patientList[0].id : null;
-    select.value = currentPatientId;
+    if (currentPatientId) select.value = currentPatientId;
   }
-  updatePatientHeading();
+  updatePatientHeading(mode);
 }
 
-function updatePatientHeading() {
+function updatePatientHeading(mode) {
+  if (mode === 'patient' && ownPatientId) {
+    const own = patientList.find((p) => p.id === ownPatientId);
+    $('#patient-heading').textContent = own ? `Meine Daten — ${own.label}` : `Meine Daten (Patient/${ownPatientId})`;
+    return;
+  }
   const entry = patientList.find((p) => p.id === currentPatientId);
   $('#patient-heading').textContent = entry ? entry.label : (currentPatientId ? `Patient/${currentPatientId}` : 'Kein Patient');
 }
@@ -240,8 +267,11 @@ $('#logout').addEventListener('click', async () => {
 
 $('#patient-select').addEventListener('change', (e) => {
   currentPatientId = e.target.value;
-  updatePatientHeading();
+  updatePatientHeading('doctor');
 });
+
+$('#view-patient').addEventListener('click', () => setViewMode('patient'));
+$('#view-doctor').addEventListener('click', () => setViewMode('doctor'));
 
 document.querySelectorAll('.action').forEach((btn) => {
   btn.addEventListener('click', async () => {

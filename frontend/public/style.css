@@ -127,6 +127,32 @@ input:focus { outline: none; border-color: var(--primary); }
   border-radius: 12px;
   padding: 1.25rem;
 }
+.view-switch {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  background: var(--bg);
+  padding: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.view-btn {
+  flex: 1;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.view-btn:hover { color: var(--text); }
+.view-btn.active {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
 .patient-select {
   display: block;
   font-size: 0.8rem;
