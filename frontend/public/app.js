@@ -30,31 +30,105 @@ function showApp(me) {
   setupPatientContext(me);
 }
 
-// Richtet den Patientenkontext ein: Patient-User bekommen fix ihren eigenen
-// Patienten (kein Selektor), Aerzte/Admin eine Auswahlliste.
+// Richtet den Patientenkontext ein. Rollenagnostisch:
+//  - Doppelrolle (Arzt + eigener Datensatz): Umschalter sichtbar, Default = Patient-Sicht
+//  - reiner Patient: keine Auswahl, fix eigener Datensatz
+//  - reiner Arzt (kein eigener Datensatz): keine Patient-Sicht, fix Arzt-Auswahl
+let ownPatientId = null;
+let isDoctor = false;
+
 function setupPatientContext(me) {
   patientList = me.patients || [];
+  ownPatientId = me.ownPatientId || null;
+  isDoctor = !!me.isDoctor;
+  const canBeBoth = isDoctor && ownPatientId;
+
+  $('#view-switch').classList.toggle('hidden', !canBeBoth);
+
+  if (ownPatientId) {
+    setViewMode('patient');        // hat eigene Daten -> startet in Patient-Sicht
+  } else {
+    setViewMode('doctor');         // reiner Arzt -> Auswahl
+  }
+}
+
+// Wechselt zwischen Patient-Sicht (eigener Datensatz) und Arzt-Sicht (Auswahlliste).
+function setViewMode(mode) {
   const wrap = $('#patient-select-wrap');
   const select = $('#patient-select');
-  const isPatient = me.roles.includes('Patient') && !me.roles.includes('Doctor');
+  $('#view-patient')?.classList.toggle('active', mode === 'patient');
+  $('#view-doctor')?.classList.toggle('active', mode === 'doctor');
 
-  if (isPatient || patientList.length <= 1) {
+  if (mode === 'patient' && ownPatientId) {
     wrap.classList.add('hidden');
-    currentPatientId = me.patientId || (patientList[0] && patientList[0].id) || null;
+    currentPatientId = ownPatientId;
   } else {
-    wrap.classList.remove('hidden');
+    // Arzt-Sicht: Auswahlliste anzeigen (sofern mehr als nur der eigene Patient)
+    wrap.classList.toggle('hidden', patientList.length <= 1);
     select.innerHTML = patientList
       .map((p) => `<option value="${p.id}">${p.label}</option>`)
       .join('');
     currentPatientId = patientList[0] ? patientList[0].id : null;
-    select.value = currentPatientId;
+    if (currentPatientId) select.value = currentPatientId;
   }
-  updatePatientHeading();
+  updatePatientHeading(mode);
+  updateAccessPanel(mode);
 }
 
-function updatePatientHeading() {
+function updatePatientHeading(mode) {
+  if (mode === 'patient' && ownPatientId) {
+    const own = patientList.find((p) => p.id === ownPatientId);
+    $('#patient-heading').textContent = own ? `Meine Daten — ${own.label}` : `Meine Daten (Patient/${ownPatientId})`;
+    return;
+  }
   const entry = patientList.find((p) => p.id === currentPatientId);
   $('#patient-heading').textContent = entry ? entry.label : (currentPatientId ? `Patient/${currentPatientId}` : 'Kein Patient');
+}
+
+// ---------- Zugriffsverwaltung (nur Patient-Sicht auf eigenen Datensatz) ----------
+function updateAccessPanel(mode) {
+  const panel = $('#access-panel');
+  if (!panel) return;
+  if (mode === 'patient' && ownPatientId) {
+    panel.classList.remove('hidden');
+    loadAccessState();
+  } else {
+    panel.classList.add('hidden');
+  }
+}
+
+async function loadAccessState() {
+  const host = $('#access-doctors');
+  host.innerHTML = '<div class="placeholder">Lade Freigaben…</div>';
+  try {
+    const res = await fetch('/api/access/state');
+    if (!res.ok) { host.innerHTML = '<div class="denied-box">Freigaben konnten nicht geladen werden.</div>'; return; }
+    renderAccess(await res.json());
+  } catch {
+    host.innerHTML = '<div class="denied-box">Fehler beim Laden der Freigaben.</div>';
+  }
+}
+
+function renderAccess(state) {
+  const host = $('#access-doctors');
+  if (!state.doctors || state.doctors.length === 0) {
+    host.innerHTML = '<div class="placeholder">Keine Ärzte im System.</div>';
+    return;
+  }
+  host.innerHTML = state.doctors.map((d) => {
+    const toggles = state.types.map((t) =>
+      `<label class="scope-toggle"><input type="checkbox" data-doc="${d.id}" data-type="${t.key}" ${d.scopes.includes(t.key) ? 'checked' : ''}/> ${t.label}</label>`
+    ).join('');
+    const blRows = state.instances.map((i) => {
+      const key = `${i.type}/${i.id}`;
+      return `<label class="bl-row"><input type="checkbox" data-doc="${d.id}" data-rt="${i.type}" data-rid="${i.id}" ${d.blacklist.includes(key) ? 'checked' : ''}/> <span>${escapeHtml(i.label)}</span> <span class="tag">${key}</span></label>`;
+    }).join('');
+    return `<div class="card access-doc">
+      <div class="card-title">${escapeHtml(d.name)} <span class="tag">${escapeHtml(d.username)}</span></div>
+      <div class="scope-row">${toggles}</div>
+      ${state.instances.length ? `<details><summary>Einzelne Einträge für ${escapeHtml(d.username)} sperren</summary><div class="bl-list">${blRows}</div></details>` : ''}
+    </div>`;
+  }).join('');
 }
 
 function showLogin() {
@@ -240,7 +314,37 @@ $('#logout').addEventListener('click', async () => {
 
 $('#patient-select').addEventListener('change', (e) => {
   currentPatientId = e.target.value;
-  updatePatientHeading();
+  updatePatientHeading('doctor');
+});
+
+$('#view-patient').addEventListener('click', () => setViewMode('patient'));
+$('#view-doctor').addEventListener('click', () => setViewMode('doctor'));
+
+// Freigaben/Sperren im Verwaltungs-Panel (Event-Delegation)
+$('#access-doctors').addEventListener('change', async (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement)) return;
+  el.disabled = true;
+  try {
+    if (el.dataset.type) {
+      const doc = el.dataset.doc;
+      const types = [...document.querySelectorAll(`#access-doctors input[data-type][data-doc="${doc}"]`)]
+        .filter((c) => c.checked).map((c) => c.dataset.type);
+      await fetch('/api/access/grant', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doctorId: doc, scopes: types }),
+      });
+    } else if (el.dataset.rt) {
+      await fetch('/api/access/blacklist', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doctorId: el.dataset.doc, resourceType: el.dataset.rt, resourceId: el.dataset.rid, blocked: el.checked }),
+      });
+    }
+  } catch {
+    el.checked = !el.checked; // bei Fehler zuruecksetzen
+  } finally {
+    el.disabled = false;
+  }
 });
 
 document.querySelectorAll('.action').forEach((btn) => {

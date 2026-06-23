@@ -35,7 +35,9 @@ public class UmaBlacklistService {
     private static final String ADMIN_BASE = "http://keycloak:8080/admin/realms/FHIR-Auth";
     private static final String MASTER_TOKEN_URL = "http://keycloak:8080/realms/master/protocol/openid-connect/token";
     private static final String CLIENT_ID = "fhir-client";
-    private static final long CACHE_TTL_MS = 30_000;
+    // Demo: 0 = kein Cache, jede Anfrage laedt die Blacklist frisch (Aenderungen wirken sofort).
+    // Fuer den Produktivbetrieb hoeher setzen (z.B. 30_000), um Admin-API-Last zu reduzieren.
+    private static final long CACHE_TTL_MS = 0;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
