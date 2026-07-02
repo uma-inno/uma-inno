@@ -24,6 +24,8 @@ function showApp(me) {
   $('#login-view').classList.add('hidden');
   $('#app-view').classList.remove('hidden');
   $('#who').textContent = me.username;
+  const avatar = $('#avatar');
+  if (avatar) avatar.textContent = (me.username || '?').trim().slice(0, 2).toUpperCase();
   $('#roles').innerHTML = me.roles
     .map((r) => `<span class="badge badge-${r}">${r}</span>`)
     .join('');
@@ -189,31 +191,6 @@ async function fhirGet(fhirPath) {
   return res.json();
 }
 
-// ---------- Flow-Anzeige ----------
-function renderFlow(steps) {
-  const flow = $('#flow');
-  const list = $('#flow-steps');
-  if (!steps || steps.length === 0) {
-    flow.classList.add('hidden');
-    return;
-  }
-  flow.classList.remove('hidden');
-  list.innerHTML = steps
-    .map((s) => {
-      let cls = 'warn';
-      if (s.status === 200) cls = 'ok';
-      else if (s.status === 401 || s.status === 403 || s.status === 'access_denied') cls = 'deny';
-      let html = `<li><span class="dot ${cls}"></span>${s.step} <strong>${s.status}</strong></li>`;
-      if (s.scopes && s.scopes.length) {
-        html += `<div class="flow-scopes">RPT-Scopes: ${s.scopes
-          .map((sc) => `<code>${sc}</code>`)
-          .join('')}</div>`;
-      }
-      return html;
-    })
-    .join('');
-}
-
 // ---------- Ergebnis-Rendering ----------
 function statusPill(status) {
   const cls = status === 200 ? 'status-200' : (status === 401 || status === 403) ? `status-${status}` : 'status-other';
@@ -244,10 +221,7 @@ function renderResource(label, data) {
   panel.innerHTML =
     `<h3>${label}</h3>` +
     statusPill(status) +
-    body +
-    `<details><summary>Rohes FHIR-JSON anzeigen</summary><pre>${escapeHtml(
-      JSON.stringify(data.resource, null, 2)
-    )}</pre></details>`;
+    body;
 }
 
 function renderSingle(r) {
@@ -304,12 +278,10 @@ function renderSummary(bundle) {
   }
 
   const sections = comp.section || [];
-  const presentTypes = new Set();
   let html = '';
   for (const sec of sections) {
     const loinc = sec.code?.coding?.[0]?.code || '';
     const entries = sec.entry || [];
-    presentTypes.add(sec.title);
     html += `<div class="ips-section"><h4>${escapeHtml(sec.title)} <span class="loinc">LOINC ${loinc}</span></h4>`;
     if (entries.length === 0) {
       html += '<div class="ips-empty">Keine Einträge.</div>';
@@ -324,11 +296,6 @@ function renderSummary(bundle) {
     html += '</div>';
   }
 
-  const allSections = ['Problems', 'Allergies and Intolerances', 'Medication Summary'];
-  const omitted = allSections.filter((s) => !presentTypes.has(s));
-  if (omitted.length) {
-    html += `<div class="omitted-note">Weggelassene Sections (kein Scope in der Freigabe): <strong>${omitted.join(', ')}</strong></div>`;
-  }
   return html;
 }
 
@@ -340,24 +307,33 @@ function escapeHtml(str) {
 $('#login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#login-error').textContent = '';
+  const btn = e.target.querySelector('button[type="submit"]');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Anmelden…';
   try {
     const me = await login($('#username').value, $('#password').value);
     showApp(me);
   } catch (err) {
     $('#login-error').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
-});
-
-document.querySelectorAll('.quick .chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    $('#username').value = chip.dataset.user;
-    $('#password').value = chip.dataset.pass;
-  });
 });
 
 $('#logout').addEventListener('click', async () => {
   await fetch('/api/logout', { method: 'POST' });
   showLogin();
+});
+
+// ---------- Theme (Hell/Dunkel) ----------
+// Der Ausgangswert wird bereits im <head> gesetzt (kein Flackern); hier nur das Umschalten.
+$('#theme-toggle')?.addEventListener('click', () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const next = isDark ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('theme', next); } catch { /* localStorage nicht verfuegbar */ }
 });
 
 $('#patient-select').addEventListener('change', (e) => {
@@ -410,10 +386,8 @@ document.querySelectorAll('.action').forEach((btn) => {
     const path = btn.dataset.tmpl.replace('{id}', currentPatientId);
     const label = btn.dataset.label;
     $('#result-panel').innerHTML = '<div class="placeholder">Lade…</div>';
-    renderFlow([]);
     try {
       const data = await fhirGet(path);
-      renderFlow(data.steps);
       renderResource(label, data);
     } catch (err) {
       $('#result-panel').innerHTML = `<div class="denied-box">Fehler: ${err.message}</div>`;

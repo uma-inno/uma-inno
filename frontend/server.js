@@ -288,45 +288,36 @@ async function fhirRequest(session, method, fhirPath, rpt) {
   return fetch(`${FHIR_BASE}/${fhirPath}`, { method, headers });
 }
 
-// Fuehrt eine GET-FHIR-Anfrage inkl. vollem UMA-Flow aus und liefert
-// { status, steps, payload }. Wird vom Proxy-Endpoint UND von der
+// Fuehrt eine GET-FHIR-Anfrage inkl. vollem UMA-Dance aus und liefert
+// { status, payload }. Wird vom Proxy-Endpoint UND von der
 // Login-Patientenaufloesung verwendet.
 async function umaFetch(session, fhirPath) {
-  const steps = [];
   // Access Token bei Bedarf erneuern, bevor der UMA-Flow startet
   const fresh = await ensureFreshToken(session);
   if (!fresh) {
-    return { status: 440, steps, payload: { error: 'Sitzung abgelaufen. Bitte neu anmelden.' } };
+    return { status: 440, payload: { error: 'Sitzung abgelaufen. Bitte neu anmelden.' } };
   }
   // Schritt 1: Versuch mit dem Access Token (loest 401 + Permission Ticket aus)
   let response = await fhirRequest(session, 'GET', fhirPath, null);
-  steps.push({ step: 'Access Token', status: response.status });
 
   if (response.status === 401) {
     const wwwAuth = response.headers.get('www-authenticate') || '';
     const ticketMatch = wwwAuth.match(/ticket="([^"]+)"/);
     if (ticketMatch) {
-      steps.push({ step: 'Permission Ticket erhalten', status: 401 });
+      // Schritt 2/3: Permission Ticket gegen RPT tauschen
       const rpt = await exchangeTicket(session, ticketMatch[1]);
       if (!rpt) {
-        steps.push({ step: 'RPT-Austausch', status: 'access_denied' });
-        return { status: 403, steps, payload: { error: 'Keycloak verweigert RPT (access_denied)' } };
+        return { status: 403, payload: { error: 'Keycloak verweigert RPT (access_denied)' } };
       }
-      const rptClaims = decodeJwt(rpt);
-      const rptScopes = (rptClaims.authorization?.permissions || [])
-        .flatMap((p) => (p.scopes || []).map((s) => `${p.rsname}: ${s}`));
-      steps.push({ step: 'RPT erhalten', status: 200, scopes: rptScopes });
-
       // Schritt 4: erneuter Zugriff mit RPT
       response = await fhirRequest(session, 'GET', fhirPath, rpt);
-      steps.push({ step: 'Zugriff mit RPT', status: response.status });
     }
   }
 
   const text = await response.text();
   let payload;
   try { payload = JSON.parse(text); } catch { payload = text; }
-  return { status: response.status, steps, payload };
+  return { status: response.status, payload };
 }
 
 // --- Generischer FHIR-Proxy mit UMA-Dance ---
@@ -337,9 +328,9 @@ app.get('/api/fhir/*', async (req, res) => {
   const fhirPath = req.params[0] + (req._parsedUrl.search || '');
   try {
     const result = await umaFetch(req.session, fhirPath);
-    res.status(result.status).json({ status: result.status, steps: result.steps, resource: result.payload });
+    res.status(result.status).json({ status: result.status, resource: result.payload });
   } catch (e) {
-    res.status(502).json({ error: 'FHIR-Server nicht erreichbar: ' + e.message, steps: [] });
+    res.status(502).json({ error: 'FHIR-Server nicht erreichbar: ' + e.message });
   }
 });
 
