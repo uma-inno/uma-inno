@@ -245,9 +245,33 @@ input:focus { outline: none; border-color: var(--primary); }
   cursor: pointer;
 }
 .scope-toggle input, .bl-row input { width: auto; margin: 0; cursor: pointer; }
-.bl-list { display: grid; gap: 0.45rem; margin-top: 0.6rem; }
+.bl-list { display: grid; gap: 0.45rem; margin-top: 0.4rem; }
 .bl-row { font-size: 0.82rem; }
 .access-doc details summary { margin-top: 0.6rem; color: var(--text-dim); font-size: 0.82rem; }
+.bl-type { margin-top: 0.7rem; }
+.bl-type-head {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.2rem;
+  cursor: pointer;
+  list-style: revert;
+}
+.bl-type-head:hover { color: var(--primary); }
+.bl-count {
+  font-size: 0.7rem;
+  color: var(--deny);
+  font-weight: 600;
+  margin-left: 0.3rem;
+}
+.bl-cat { margin: 0.4rem 0 0.4rem 0.75rem; }
+.bl-cat-head {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
 
 /* ---------- Result ---------- */
 .result-panel {

@@ -372,6 +372,17 @@ async function listDoctors(adminToken) {
   const users = (await adminJson(adminToken, `${ADMIN_BASE}/roles/Doctor/users?max=200`)) || [];
   return users.map((u) => ({ id: u.id, username: u.username, name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username }));
 }
+// Zieht den FHIR-category-Code + ein lesbares Label aus einer klinischen Ressource.
+// Condition/AllergyIntolerance haben ein category-Array (CodeableConcept); MedicationStatement
+// (R5) nicht -> Fallback. Ressourcen ohne Kategorie landen unter 'uncategorized'.
+function extractCategory(resource) {
+  const cc = Array.isArray(resource.category) ? resource.category[0] : null;
+  const coding = cc?.coding?.[0];
+  const code = coding?.code || (cc?.text ? cc.text : null);
+  if (!code) return { code: 'uncategorized', label: 'Ohne Kategorie' };
+  const label = coding?.display || cc?.text || code;
+  return { code, label };
+}
 async function getScopeIds(adminToken) {
   const cuid = await getClientUuid(adminToken);
   const scopes = (await adminJson(adminToken, `${AUTHZ(cuid)}/scope?max=200`)) || [];
@@ -444,7 +455,7 @@ app.get('/api/access/state', async (req, res) => {
       docState.push({ id: d.id, username: d.username, name: d.name, scopes });
     }
 
-    // eigene Instanzen via UMA-Dance als Owner holen
+    // eigene Instanzen via UMA-Dance als Owner holen (inkl. FHIR-category zur Gruppierung)
     const instances = [];
     for (const t of BLACKLISTABLE) {
       const r = await umaFetch(req.session, `${t}?patient=${patientId}`);
@@ -452,7 +463,8 @@ app.get('/api/access/state', async (req, res) => {
         const r0 = e.resource;
         if (!r0?.id) continue;
         const label = r0.code?.text || r0.code?.coding?.[0]?.display || r0.medication?.concept?.text || t;
-        instances.push({ type: t, id: r0.id, label });
+        const { code, label: catLabel } = extractCategory(r0);
+        instances.push({ type: t, id: r0.id, label, category: code, categoryLabel: catLabel });
       }
     }
     // Blacklist je Arzt aufloesen
