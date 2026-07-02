@@ -105,6 +105,118 @@
       </aside>
 
       <section class="content">
+        <div id="admin-panel" class="access-panel hidden">
+          <div class="panel-head">
+            <h3>Patient hinzufügen</h3>
+            <p class="hint">Legt einen neuen Login (Rolle Patient) und dessen verknüpften FHIR-Datensatz an. Der Patient kann sich anschließend anmelden und seine Freigaben selbst verwalten.</p>
+          </div>
+          <form id="admin-add-patient" class="admin-form">
+            <div class="admin-grid">
+              <label>Benutzername*
+                <input id="np-username" type="text" autocomplete="off" placeholder="z. B. dora" required />
+              </label>
+              <label>Passwort*
+                <input id="np-password" type="text" autocomplete="off" placeholder="Initialpasswort" required />
+              </label>
+              <label>Vorname
+                <input id="np-firstname" type="text" autocomplete="off" placeholder="Dora" />
+              </label>
+              <label>Nachname*
+                <input id="np-lastname" type="text" autocomplete="off" placeholder="Meier" required />
+              </label>
+              <label>Geschlecht
+                <select id="np-gender">
+                  <option value="">—</option>
+                  <option value="female">weiblich</option>
+                  <option value="male">männlich</option>
+                  <option value="other">divers</option>
+                  <option value="unknown">unbekannt</option>
+                </select>
+              </label>
+              <label>Geburtsdatum
+                <input id="np-birthdate" type="date" />
+              </label>
+            </div>
+            <div class="admin-actions">
+              <button type="submit" class="btn-primary">Patient anlegen</button>
+              <span id="np-msg" class="admin-msg"></span>
+            </div>
+          </form>
+        </div>
+
+        <div id="admin-doctor-panel" class="access-panel hidden">
+          <div class="panel-head">
+            <h3>Arzt hinzufügen</h3>
+            <p class="hint">Legt einen neuen Login mit Rolle Arzt (und Patient) samt eigenem FHIR-Datensatz an — wie dr.smith/dr.bob. Zugriff auf fremde Patienten wird von diesen zur Laufzeit freigegeben.</p>
+          </div>
+          <form id="admin-add-doctor" class="admin-form">
+            <div class="admin-grid">
+              <label>Benutzername*
+                <input id="nd-username" type="text" autocomplete="off" placeholder="z. B. dr.wagner" required />
+              </label>
+              <label>Passwort*
+                <input id="nd-password" type="text" autocomplete="off" placeholder="Initialpasswort" required />
+              </label>
+              <label>Vorname
+                <input id="nd-firstname" type="text" autocomplete="off" placeholder="Petra" />
+              </label>
+              <label>Nachname*
+                <input id="nd-lastname" type="text" autocomplete="off" placeholder="Wagner" required />
+              </label>
+              <label>Geschlecht
+                <select id="nd-gender">
+                  <option value="">—</option>
+                  <option value="female">weiblich</option>
+                  <option value="male">männlich</option>
+                  <option value="other">divers</option>
+                  <option value="unknown">unbekannt</option>
+                </select>
+              </label>
+              <label>Geburtsdatum
+                <input id="nd-birthdate" type="date" />
+              </label>
+            </div>
+            <div class="admin-actions">
+              <button type="submit" class="btn-primary">Arzt anlegen</button>
+              <span id="nd-msg" class="admin-msg"></span>
+            </div>
+          </form>
+        </div>
+
+        <div id="admin-clinical-panel" class="access-panel hidden">
+          <div class="panel-head">
+            <h3>Klinische Daten hinzufügen</h3>
+            <p class="hint">Fügt eine Diagnose, Medikation oder Allergie zu einem Patienten hinzu.</p>
+          </div>
+          <form id="admin-add-clinical" class="admin-form">
+            <div class="admin-grid">
+              <label>Patient*
+                <select id="nc-patient" required></select>
+              </label>
+              <label>Datentyp*
+                <select id="nc-type">
+                  <option value="Condition">Diagnose</option>
+                  <option value="MedicationStatement">Medikation</option>
+                  <option value="AllergyIntolerance">Allergie</option>
+                </select>
+              </label>
+              <label id="nc-cat-wrap">Kategorie
+                <select id="nc-category">
+                  <option value="problem-list-item">Problemliste</option>
+                  <option value="encounter-diagnosis">Behandlungsdiagnose</option>
+                </select>
+              </label>
+              <label class="admin-wide">Bezeichnung*
+                <input id="nc-text" type="text" autocomplete="off" placeholder="z. B. Hypertension / Metformin 500mg / Penicillin" required />
+              </label>
+            </div>
+            <div class="admin-actions">
+              <button type="submit" class="btn-primary">Daten anlegen</button>
+              <span id="nc-msg" class="admin-msg"></span>
+            </div>
+          </form>
+        </div>
+
         <div id="access-panel" class="access-panel hidden">
           <div class="panel-head">
             <h3>Meine Freigaben</h3>

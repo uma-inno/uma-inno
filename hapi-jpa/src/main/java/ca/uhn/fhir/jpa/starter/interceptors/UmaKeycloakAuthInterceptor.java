@@ -952,8 +952,8 @@ public class UmaKeycloakAuthInterceptor {
      *
      * RBAC Rules:
      * - patient: Cannot create any resources
-     * - practitioner/doctor: Can create Patient and clinical resources
-     * - admin: Can create everything
+     * - doctor: Can create Patient and clinical resources
+     * - admin/administrator: Can create everything
      *
      * @param roles List of user's roles
      * @param resourceType The FHIR resource type to create
@@ -981,8 +981,9 @@ public class UmaKeycloakAuthInterceptor {
                     break;
 
                 case "admin":
+                case "administrator":
                     // Admins can create everything
-                    logger.info("Role 'admin' can create any resource");
+                    logger.info("Role '{}' can create any resource", role);
                     return true;
 
                 default:

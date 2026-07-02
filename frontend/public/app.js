@@ -29,7 +29,31 @@ function showApp(me) {
   $('#roles').innerHTML = me.roles
     .map((r) => `<span class="badge badge-${r}">${r}</span>`)
     .join('');
+  setupAdminPanel(me);
   setupPatientContext(me);
+}
+
+// Blendet die Admin-Panels (Patient/Arzt anlegen, klinische Daten) nur fuer
+// Administratoren ein und laedt die Patientenauswahl fuer die klinischen Daten.
+function setupAdminPanel(me) {
+  for (const id of ['#admin-panel', '#admin-doctor-panel', '#admin-clinical-panel']) {
+    $(id)?.classList.toggle('hidden', !me.isAdmin);
+  }
+  if (me.isAdmin) loadAdminPatientList();
+}
+
+// Laedt alle Patienten in das Zielpatient-Dropdown der klinischen Daten.
+async function loadAdminPatientList() {
+  const select = $('#nc-patient');
+  if (!select) return;
+  try {
+    const res = await fetch('/api/admin/patients');
+    if (!res.ok) return;
+    const { patients } = await res.json();
+    select.innerHTML = (patients || [])
+      .map((p) => `<option value="${p.id}">${escapeHtml(p.label)}</option>`)
+      .join('');
+  } catch { /* ignore */ }
 }
 
 // Richtet den Patientenkontext ein. Rollenagnostisch:
@@ -399,6 +423,91 @@ $('#access-doctors').addEventListener('change', async (e) => {
   } finally {
     el.disabled = false;
   }
+});
+
+// Generischer Submit fuer die Admin-Formulare: POST an <url>, Button-/Status-Handling,
+// Erfolgsmeldung via successMsg(data). Bei { warning } wird eine Warnung angezeigt.
+async function submitAdminForm(form, msgEl, url, body, successMsg) {
+  const btn = form.querySelector('button[type="submit"]');
+  const label = btn.textContent;
+  msgEl.textContent = '';
+  msgEl.className = 'admin-msg';
+  btn.disabled = true;
+  btn.textContent = 'Anlegen…';
+  try {
+    const res = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Anlegen fehlgeschlagen');
+    if (data.warning) {
+      msgEl.textContent = `⚠ ${data.warning}`;
+      msgEl.classList.add('err');
+    } else {
+      msgEl.textContent = successMsg(data);
+      msgEl.classList.add('ok');
+      form.reset();
+    }
+    return data;
+  } catch (err) {
+    msgEl.textContent = err.message;
+    msgEl.classList.add('err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+// Admin: neuen Patienten (KC-User + FHIR-Datensatz) anlegen
+$('#admin-add-patient')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {
+    username: $('#np-username').value.trim(),
+    password: $('#np-password').value,
+    firstName: $('#np-firstname').value.trim(),
+    lastName: $('#np-lastname').value.trim(),
+    gender: $('#np-gender').value || undefined,
+    birthDate: $('#np-birthdate').value || undefined,
+  };
+  await submitAdminForm(e.target, $('#np-msg'), '/api/admin/patients', body,
+    (d) => `✓ Patient angelegt: ${body.username} → Patient/${d.patientId}`);
+  loadAdminPatientList(); // neuer Patient in der Auswahlliste verfuegbar machen
+});
+
+// Admin: neuen Arzt (KC-User Doctor+Patient + eigener FHIR-Datensatz) anlegen
+$('#admin-add-doctor')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {
+    username: $('#nd-username').value.trim(),
+    password: $('#nd-password').value,
+    firstName: $('#nd-firstname').value.trim(),
+    lastName: $('#nd-lastname').value.trim(),
+    gender: $('#nd-gender').value || undefined,
+    birthDate: $('#nd-birthdate').value || undefined,
+  };
+  await submitAdminForm(e.target, $('#nd-msg'), '/api/admin/doctors', body,
+    (d) => `✓ Arzt angelegt: ${body.username} → Patient/${d.patientId}`);
+  loadAdminPatientList(); // Arzt hat eigenen Datensatz -> auch in der Auswahl
+});
+
+// Kategorie-Feld nur bei Diagnose (Condition) zeigen.
+$('#nc-type')?.addEventListener('change', (e) => {
+  $('#nc-cat-wrap')?.classList.toggle('hidden', e.target.value !== 'Condition');
+});
+
+// Admin: klinische Daten (Condition/MedicationStatement/AllergyIntolerance) anlegen
+$('#admin-add-clinical')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const resourceType = $('#nc-type').value;
+  const body = {
+    patientId: $('#nc-patient').value,
+    resourceType,
+    text: $('#nc-text').value.trim(),
+    ...(resourceType === 'Condition' ? { category: $('#nc-category').value } : {}),
+  };
+  await submitAdminForm(e.target, $('#nc-msg'), '/api/admin/clinical', body,
+    (d) => `✓ ${resourceType}/${d.id} für Patient/${d.patientId} angelegt`);
 });
 
 document.querySelectorAll('.action').forEach((btn) => {

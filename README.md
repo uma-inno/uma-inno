@@ -14,6 +14,7 @@ This project implements **User-Managed Access (UMA) 2.0** authorization for a FH
 - SMART on FHIR v2 scopes + role-based create checks (Patient, Doctor, Administrator)
 - Complete UMA 2.0 flow with Keycloak (permission ticket → RPT → access)
 - Patient-controlled sharing: patients grant/revoke doctor access and block individual records at runtime
+- Administrator can onboard new patients and doctors (creates the Keycloak user *and* the linked FHIR record in one step) and add clinical data (Condition/MedicationStatement/AllergyIntolerance) to any patient
 - Permission-filtered `$summary` (International Patient Summary) operation
 - Dockerized demo frontend that performs the UMA dance server-side
 
@@ -63,7 +64,7 @@ cd ../keycloak-config
 | clara | clara123 | Patient | Patient/11 (owner) |
 | dr.smith | smith123 | Doctor + Patient | owns their own record; access to other patients is granted at runtime by each patient |
 | dr.bob | bob123 | Doctor + Patient | owns their own record; access to other patients is granted at runtime by each patient |
-| jan | _(from import)_ | Administrator | — |
+| jan | jan123 | Administrator | — (admin panels: add patients, add doctors, add clinical data for any patient) |
 
 ---
 

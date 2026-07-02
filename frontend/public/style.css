@@ -552,3 +552,26 @@ summary { cursor: pointer; color: var(--text-dim); font-size: 0.85rem; }
 :root[data-theme="dark"] .denied-box { color: #fca5a5; }
 :root[data-theme="dark"] .denied-box strong { color: #fecaca; }
 :root[data-theme="dark"] .bl-locked-note strong { color: #fcd34d; }
+
+/* ---------- Admin: Patient hinzufuegen ---------- */
+#admin-panel { margin-bottom: 1.2rem; }
+.admin-form { margin-top: 0.2rem; }
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1rem;
+}
+.admin-grid label { margin: 0; }
+.admin-grid .admin-wide { grid-column: 1 / -1; }
+.admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.1rem;
+  flex-wrap: wrap;
+}
+.admin-actions .btn-primary { width: auto; padding: 0.7rem 1.4rem; }
+.admin-msg { font-size: 0.85rem; font-weight: 500; min-height: 1rem; }
+.admin-msg.ok { color: var(--ok); }
+.admin-msg.err { color: var(--deny); }
+@media (max-width: 620px) { .admin-grid { grid-template-columns: 1fr; } }

@@ -33,6 +33,9 @@ const READ_SCOPE_BY_TYPE = {
 const TYPE_LABELS = { Patient: 'Stammdaten', Condition: 'Diagnosen', MedicationStatement: 'Medikation', AllergyIntolerance: 'Allergien' };
 // Nur klinische Instanzen sind einzeln sperrbar (Stammdaten = der ganze Patient).
 const BLACKLISTABLE = ['Condition', 'MedicationStatement', 'AllergyIntolerance'];
+// Vollstaendiger SMART-v2-Scope-Satz an der Patient-Ressource (wie setup-smart-v2-authz.ps1).
+// Der Owner bekommt darauf Vollzugriff, damit er seine eigenen Daten lesen kann.
+const SMART_SCOPES = ['patient/Patient.r', 'patient/Patient.rs', 'patient/Condition.rs', 'patient/MedicationStatement.rs', 'patient/AllergyIntolerance.rs'];
 
 const app = express();
 app.use(express.json());
@@ -138,6 +141,7 @@ app.post('/api/login', async (req, res) => {
       roles: req.session.roles,
       ownPatientId: req.session.ownPatientId,
       isDoctor: req.session.isDoctor,
+      isAdmin: req.session.roles.includes('Administrator'),
       isPatient: req.session.ownPatientId != null,
       patients: req.session.patients,
     });
@@ -220,6 +224,7 @@ app.get('/api/me', async (req, res) => {
     roles: req.session.roles,
     ownPatientId: req.session.ownPatientId,
     isDoctor: req.session.isDoctor,
+    isAdmin: req.session.roles.includes('Administrator'),
     isPatient: req.session.ownPatientId != null,
     patients: req.session.patients,
   });
@@ -547,6 +552,273 @@ app.post('/api/access/blacklist', async (req, res) => {
     if (blocked) await ensureUserPolicy(adminToken, name, doc.id);
     else await deletePolicyByName(adminToken, name);
     res.json({ ok: true, blocked: !!blocked });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// ============================================================================
+// Admin: User & klinische Daten anlegen
+// - Patient: KC-User (Rolle Patient) + verknuepfte FHIR-Patient-Ressource.
+// - Arzt: KC-User (Rollen Doctor + Patient) + eigener FHIR-Patient-Datensatz
+//   (wie dr.smith/dr.bob), damit die "Als Patient"-Sicht funktioniert.
+// - Klinische Daten: Condition/MedicationStatement/AllergyIntolerance fuer einen
+//   waehlbaren Patienten.
+// Ein "Patient" besteht aus (a) einem Keycloak-User und (b) einer FHIR-Patient-
+// Ressource, die per identifier[keycloak-uuid] mit dem User verknuepft ist. Der
+// HAPI-Interceptor registriert die Patient/<id>-Ressource danach automatisch in
+// Keycloak mit dem User als Owner. Nur Administratoren duerfen das (RBAC im Proxy
+// + im FHIR-Interceptor).
+// ============================================================================
+
+// Richtet fuer eine frisch angelegte Patient-Ressource den Owner-Vollzugriff ein,
+// analog zu setup-smart-v2-authz.ps1. Ohne das erhaelt der Patient kein RPT auf den
+// eigenen Datensatz (Keycloak verweigert -> "Kein Zugriff" auf die eigenen Daten).
+//   1. Ressource: ownerManagedAccess=false + alle SMART-Scopes anhaengen
+//      (OMA=true fuehrt zu access_denied: request_submitted).
+//   2. UserPolicy-Owner-<username> (verweist auf die User-UUID)
+//   3. Permission-Patient<id>-Owner-Full (scope, alle SMART-Scopes, Owner-Policy)
+async function grantOwnerFullAccess(adminToken, patientId, userId, username) {
+  const cuid = await getClientUuid(adminToken);
+  const resourceName = `Patient/${patientId}`;
+  const found = (await adminJson(adminToken, `${AUTHZ(cuid)}/resource?name=${encodeURIComponent(resourceName)}&deep=true`)) || [];
+  const resource = found.find((r) => r.name === resourceName);
+  if (!resource) throw new Error(`Registrierte Ressource ${resourceName} nicht gefunden`);
+
+  // 1. OMA=false + SMART-Scopes an der Ressource setzen
+  await adminSend(adminToken, 'PUT', `${AUTHZ(cuid)}/resource/${resource._id}`, {
+    _id: resource._id, name: resource.name, displayName: resource.name, type: resource.type,
+    owner: { id: resource.owner?.id || userId }, ownerManagedAccess: false,
+    scopes: SMART_SCOPES.map((name) => ({ name })),
+  });
+
+  // 2. Owner-Policy + 3. Owner-Vollzugriffs-Permission
+  const ownerPolId = await ensureUserPolicy(adminToken, `UserPolicy-Owner-${username}`, userId);
+  const scopeIdMap = await getScopeIds(adminToken);
+  const scopeIds = SMART_SCOPES.map((s) => scopeIdMap[s]).filter(Boolean);
+  await upsertScopePermission(adminToken, `Permission-Patient${patientId}-Owner-Full`, resource._id, scopeIds, [ownerPolId]);
+}
+
+// Stellt sicher, dass der eingeloggte User Administrator ist.
+function requireAdmin(req, res) {
+  if (!req.session.accessToken) { res.status(401).json({ error: 'nicht angemeldet' }); return false; }
+  if (!req.session.roles?.includes('Administrator')) {
+    res.status(403).json({ error: 'nur fuer Administratoren' }); return false;
+  }
+  return true;
+}
+
+// Legt einen Keycloak-User an, weist die angegebenen Realm-Rollen zu und liefert die UUID.
+async function createKeycloakUser(adminToken, { username, password, firstName, lastName, email }, roles) {
+  // 1. User anlegen
+  const createRes = await adminSend(adminToken, 'POST', `${ADMIN_BASE}/users`, {
+    username, enabled: true, firstName, lastName,
+    email: email || `${username}@example.org`, emailVerified: true,
+    credentials: [{ type: 'password', value: password, temporary: false }],
+  });
+  if (createRes.status === 409) {
+    throw Object.assign(new Error(`Benutzername "${username}" existiert bereits`), { httpStatus: 409 });
+  }
+  if (!createRes.ok) {
+    throw new Error(`Keycloak-User konnte nicht angelegt werden (${createRes.status})`);
+  }
+  // 2. UUID des neuen Users holen
+  const found = await adminJson(adminToken, `${ADMIN_BASE}/users?username=${encodeURIComponent(username)}&exact=true`);
+  const userId = found?.[0]?.id;
+  if (!userId) throw new Error('Neuer User nicht auffindbar');
+  // 3. Realm-Rollen zuweisen
+  const roleReps = [];
+  for (const roleName of roles) {
+    const role = await adminJson(adminToken, `${ADMIN_BASE}/roles/${encodeURIComponent(roleName)}`);
+    if (role?.id) roleReps.push({ id: role.id, name: roleName });
+  }
+  if (roleReps.length) {
+    await adminSend(adminToken, 'POST', `${ADMIN_BASE}/users/${userId}/role-mappings/realm`, roleReps);
+  }
+  return userId;
+}
+
+// Legt fuer einen (frisch angelegten) User einen verknuepften FHIR-Patient-Datensatz an
+// und richtet den Owner-Vollzugriff ein. Wirft bei FHIR-Fehler (Aufrufer raeumt den
+// KC-User auf). Liefert die neue FHIR-Patient-ID. Nutzt das Admin-Access-Token der Session.
+async function createLinkedPatientRecord(adminToken, session, userId, { firstName, lastName, gender, birthDate }) {
+  const fresh = await ensureFreshToken(session);
+  if (!fresh) throw Object.assign(new Error('Sitzung abgelaufen. Bitte neu anmelden.'), { httpStatus: 440 });
+
+  const patientBody = {
+    resourceType: 'Patient',
+    identifier: [{ system: 'keycloak-uuid', value: userId }],
+    name: [{ family: lastName, given: firstName ? [firstName] : [] }],
+    ...(gender ? { gender } : {}),
+    ...(birthDate ? { birthDate } : {}),
+  };
+  const fhirRes = await fetch(`${FHIR_BASE}/Patient`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+      'Content-Type': 'application/fhir+json',
+      Accept: 'application/fhir+json',
+    },
+    body: JSON.stringify(patientBody),
+  });
+  const text = await fhirRes.text();
+  let payload; try { payload = JSON.parse(text); } catch { payload = text; }
+  if (!fhirRes.ok) {
+    const diag = payload?.issue?.[0]?.diagnostics || `FHIR-Fehler (${fhirRes.status})`;
+    throw Object.assign(new Error(diag), { httpStatus: fhirRes.status === 403 ? 403 : 502 });
+  }
+  return payload?.id || null;
+}
+
+// Gemeinsamer Ablauf fuer "User mit eigenem FHIR-Datensatz anlegen": KC-User mit den
+// gewuenschten Rollen -> verknuepfter FHIR-Patient -> Owner-Vollzugriff. Bei jedem
+// Fehler nach der User-Anlage wird der KC-User wieder entfernt (kein verwaister Login).
+// Liefert das Response-JSON (inkl. optionalem warning) oder wirft mit httpStatus.
+async function provisionUserWithRecord(req, roles, { username, password, firstName, lastName, gender, birthDate, email }) {
+  const adminToken = await getAdminToken();
+  if (!adminToken) throw Object.assign(new Error('Kein Admin-Token'), { httpStatus: 502 });
+
+  let userId = null;
+  try {
+    // 1. Keycloak-User mit Rollen anlegen
+    userId = await createKeycloakUser(adminToken, { username, password, firstName, lastName, email }, roles);
+
+    // 2. FHIR-Patient mit keycloak-uuid anlegen (POST mit Admin-Access-Token; RBAC erlaubt).
+    //    HAPI registriert die Patient/<id>-Ressource danach in Keycloak (Owner = userId).
+    const newId = await createLinkedPatientRecord(adminToken, req.session, userId, { firstName, lastName, gender, birthDate });
+
+    // 3. Owner-Vollzugriff einrichten, damit der neue User seine eigenen Daten lesen kann.
+    const result = { ok: true, patientId: newId, userId, username };
+    if (newId) {
+      try {
+        await grantOwnerFullAccess(adminToken, newId, userId, username);
+      } catch (grantErr) {
+        console.warn('Owner-Freigabe fehlgeschlagen fuer Patient/' + newId + ':', grantErr.message);
+        result.warning = 'Angelegt, aber Owner-Freigabe fehlgeschlagen: ' + grantErr.message;
+      }
+    }
+    return result;
+  } catch (e) {
+    // Bei Fehler nach User-Anlage aufraeumen (best effort).
+    if (userId) {
+      await adminSend(adminToken, 'DELETE', `${ADMIN_BASE}/users/${userId}`).catch(() => {});
+    }
+    throw e;
+  }
+}
+
+// POST /api/admin/patients  { username, password, firstName, lastName, gender, birthDate, email? }
+// Legt KC-User (Rolle Patient) + verknuepfte FHIR-Patient-Ressource an.
+app.post('/api/admin/patients', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { username, password, firstName, lastName, gender, birthDate, email } = req.body || {};
+  if (!username || !password || !lastName) {
+    return res.status(400).json({ error: 'username, password und lastName sind erforderlich' });
+  }
+  try {
+    const result = await provisionUserWithRecord(req, ['Patient'], { username, password, firstName, lastName, gender, birthDate, email });
+    res.status(201).json(result);
+  } catch (e) {
+    res.status(e.httpStatus || 502).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/doctors  { username, password, firstName, lastName, gender, birthDate, email? }
+// Legt KC-User (Rollen Doctor + Patient) + eigenen FHIR-Patient-Datensatz an — wie dr.smith/dr.bob.
+app.post('/api/admin/doctors', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { username, password, firstName, lastName, gender, birthDate, email } = req.body || {};
+  if (!username || !password || !lastName) {
+    return res.status(400).json({ error: 'username, password und lastName sind erforderlich' });
+  }
+  try {
+    // Doctor + Patient: eigener Datensatz, damit die "Als Patient"-Sicht funktioniert.
+    const result = await provisionUserWithRecord(req, ['Doctor', 'Patient'], { username, password, firstName, lastName, gender, birthDate, email });
+    res.status(201).json(result);
+  } catch (e) {
+    res.status(e.httpStatus || 502).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/patients — Liste aller Patienten (aus der Keycloak-Ressourcenliste),
+// damit der Admin im Frontend einen Zielpatienten fuer klinische Daten waehlen kann.
+app.get('/api/admin/patients', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const adminToken = await getAdminToken();
+    if (!adminToken) return res.status(502).json({ error: 'Kein Admin-Token' });
+    const all = await listKeycloakPatients(adminToken);
+    const patients = all
+      .sort((a, b) => Number(a.id) - Number(b.id))
+      .map((p) => ({ id: p.id, label: `${p.ownerName || 'Patient'} (Patient/${p.id})` }));
+    res.json({ patients });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Baut den FHIR-Body fuer eine klinische Ressource (subject = Patient/<id>).
+function buildClinicalResource(resourceType, patientId, { text, category }) {
+  const subjectRef = { reference: `Patient/${patientId}` };
+  if (resourceType === 'Condition') {
+    return {
+      resourceType: 'Condition',
+      subject: subjectRef,
+      code: { text },
+      category: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-category', code: category || 'problem-list-item' }] }],
+      clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/condition-clinical', code: 'active' }] },
+    };
+  }
+  if (resourceType === 'MedicationStatement') {
+    return {
+      resourceType: 'MedicationStatement',
+      status: 'recorded',
+      subject: subjectRef,
+      medication: { concept: { text } },
+    };
+  }
+  if (resourceType === 'AllergyIntolerance') {
+    return {
+      resourceType: 'AllergyIntolerance',
+      patient: subjectRef,
+      code: { text },
+      clinicalStatus: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical', code: 'active' }] },
+    };
+  }
+  return null;
+}
+
+// POST /api/admin/clinical  { patientId, resourceType, text, category? }
+// Legt eine klinische Ressource (Condition/MedicationStatement/AllergyIntolerance) fuer
+// einen Patienten an. POST mit Admin-Access-Token (RBAC erlaubt). Die Ressource wird ueber
+// die Permissions des Ziel-Patienten autorisiert (nicht separat in Keycloak registriert).
+app.post('/api/admin/clinical', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { patientId, resourceType, text, category } = req.body || {};
+  if (!patientId || !BLACKLISTABLE.includes(resourceType) || !text) {
+    return res.status(400).json({ error: 'patientId, gueltiger resourceType (Condition/MedicationStatement/AllergyIntolerance) und text erforderlich' });
+  }
+  try {
+    const fresh = await ensureFreshToken(req.session);
+    if (!fresh) return res.status(440).json({ error: 'Sitzung abgelaufen. Bitte neu anmelden.' });
+
+    const body = buildClinicalResource(resourceType, patientId, { text, category });
+    const fhirRes = await fetch(`${FHIR_BASE}/${resourceType}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${req.session.accessToken}`,
+        'Content-Type': 'application/fhir+json',
+        Accept: 'application/fhir+json',
+      },
+      body: JSON.stringify(body),
+    });
+    const respText = await fhirRes.text();
+    let payload; try { payload = JSON.parse(respText); } catch { payload = respText; }
+    if (!fhirRes.ok) {
+      const diag = payload?.issue?.[0]?.diagnostics || `FHIR-Fehler (${fhirRes.status})`;
+      return res.status(fhirRes.status === 403 ? 403 : 502).json({ error: diag });
+    }
+    res.status(201).json({ ok: true, resourceType, id: payload?.id || null, patientId });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
