@@ -146,13 +146,29 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Liefert die Patient-IDs, fuer die dem Arzt <username> eine Freigabe erteilt wurde.
+// Eine Freigabe existiert genau dann, wenn eine Permission "Permission-Patient<id>-<username>"
+// vorhanden ist (angelegt/geloescht durch /api/access/grant).
+async function grantedPatientIds(adminToken, username) {
+  const cuid = await getClientUuid(adminToken);
+  const list = (await adminJson(adminToken, `${AUTHZ(cuid)}/policy?name=Permission-Patient&max=500`)) || [];
+  const suffix = `-${username}`;
+  const ids = new Set();
+  for (const p of list) {
+    const m = /^Permission-Patient(\d+)-(.+)$/.exec(p.name);
+    if (m && p.name.endsWith(suffix)) ids.add(m[1]);
+  }
+  return ids;
+}
+
 // Bestimmt den Patientenkontext nach dem Login (Quelle: Keycloak-Authorization-Config).
 // Rollenagnostisch — ein User kann gleichzeitig Patient UND Arzt sein:
 //  - ownPatientId: der Patient, dessen Owner die eigene Keycloak-UUID (sub) ist
 //    (eigener Datensatz), sofern vorhanden. Wird IMMER ermittelt, egal welche Rollen.
 //  - isDoctor: hat die Doctor-Rolle -> darf die Patientenauswahl sehen.
-//  - patients: Auswahlliste. Fuer Aerzte alle Patienten, sonst nur der eigene.
-// Welche davon tatsaechlich zugaenglich sind, entscheidet erst die UMA-Durchsetzung.
+//  - patients: Auswahlliste. Fuer Aerzte NUR die freigegebenen (fremden) Patienten;
+//    der eigene Datensatz erscheint hier NICHT (nur in der Patient-Sicht ueber ownPatientId).
+//    Fuer reine Patienten nur der eigene.
 async function resolvePatientContext(session, sub) {
   session.ownPatientId = null;
   session.isDoctor = session.roles.includes('Doctor');
@@ -173,8 +189,13 @@ async function resolvePatientContext(session, sub) {
     }
 
     if (session.isDoctor) {
-      // Arzt-Sicht: alle Patienten zur Auswahl (numerisch sortiert)
-      session.patients = all.sort((a, b) => Number(a.id) - Number(b.id)).map(toEntry);
+      // Arzt-Sicht: nur (fremde) Patienten, die diesem Arzt Zugriff gegeben haben.
+      // Der eigene Datensatz gehoert NICHT hierher (nur in die Patient-Sicht).
+      const granted = await grantedPatientIds(adminToken, session.username);
+      session.patients = all
+        .filter((p) => granted.has(p.id) && !(own && p.id === own.id))
+        .sort((a, b) => Number(a.id) - Number(b.id))
+        .map(toEntry);
     } else if (own) {
       // reiner Patient: nur der eigene
       session.patients = [toEntry(own)];
@@ -188,8 +209,12 @@ app.post('/api/logout', (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
 
-app.get('/api/me', (req, res) => {
+app.get('/api/me', async (req, res) => {
   if (!req.session.accessToken) return res.status(401).json({ error: 'nicht angemeldet' });
+  // Patientenliste frisch aufloesen, damit neu erteilte/entzogene Freigaben sofort
+  // in der Arzt-Auswahl erscheinen (ohne erneutes Login).
+  const claims = decodeJwt(req.session.accessToken);
+  await resolvePatientContext(req.session, claims.sub);
   res.json({
     username: req.session.username,
     roles: req.session.roles,
@@ -402,7 +427,9 @@ app.get('/api/access/state', async (req, res) => {
     const adminToken = await getAdminToken();
     if (!adminToken) return res.status(502).json({ error: 'Kein Admin-Token' });
 
-    const doctors = await listDoctors(adminToken);
+    // Sich selbst nicht auflisten: ein Arzt verwaltet in seiner eigenen Patient-Sicht
+    // keine Freigaben/Sperren fuer sich selbst.
+    const doctors = (await listDoctors(adminToken)).filter((d) => d.username !== req.session.username);
     const blacklist = await listBlacklistNames(adminToken);
 
     // gewaehrte Scope-Typen je Arzt aus der (patient,arzt)-Permission
@@ -456,6 +483,7 @@ app.post('/api/access/grant', async (req, res) => {
     const adminToken = await getAdminToken();
     const doc = (await listDoctors(adminToken)).find((d) => d.id === doctorId);
     if (!doc) return res.status(400).json({ error: 'Unbekannter Arzt' });
+    if (doc.username === req.session.username) return res.status(400).json({ error: 'Selbstfreigabe nicht erlaubt' });
 
     const permName = `Permission-Patient${patientId}-${doc.username}`;
     const trustName = `TrustList-Patient${patientId}-${doc.username}`;
@@ -491,6 +519,7 @@ app.post('/api/access/blacklist', async (req, res) => {
     const adminToken = await getAdminToken();
     const doc = (await listDoctors(adminToken)).find((d) => d.id === doctorId);
     if (!doc) return res.status(400).json({ error: 'Unbekannter Arzt' });
+    if (doc.username === req.session.username) return res.status(400).json({ error: 'Selbstsperre nicht erlaubt' });
 
     const name = `Blacklist-${patientId}-${resourceType}-${resourceId}-${doc.id}`;
     if (blocked) await ensureUserPolicy(adminToken, name, doc.id);
