@@ -115,19 +115,48 @@ function renderAccess(state) {
     host.innerHTML = '<div class="placeholder">Keine Ärzte im System.</div>';
     return;
   }
+  // Typ-Label-Lookup aus state.types (key -> label)
+  const typeLabel = {};
+  for (const t of state.types) typeLabel[t.key] = t.label;
+
   host.innerHTML = state.doctors.map((d) => {
     const toggles = state.types.map((t) =>
       `<label class="scope-toggle"><input type="checkbox" data-doc="${d.id}" data-type="${t.key}" ${d.scopes.includes(t.key) ? 'checked' : ''}/> ${t.label}</label>`
     ).join('');
-    const blRows = state.instances.map((i) => {
-      const key = `${i.type}/${i.id}`;
-      return `<label class="bl-row"><input type="checkbox" data-doc="${d.id}" data-rt="${i.type}" data-rid="${i.id}" ${d.blacklist.includes(key) ? 'checked' : ''}/> <span>${escapeHtml(i.label)}</span> <span class="tag">${key}</span></label>`;
-    }).join('');
     return `<div class="card access-doc">
       <div class="card-title">${escapeHtml(d.name)} <span class="tag">${escapeHtml(d.username)}</span></div>
       <div class="scope-row">${toggles}</div>
-      ${state.instances.length ? `<details><summary>Einzelne Einträge für ${escapeHtml(d.username)} sperren</summary><div class="bl-list">${blRows}</div></details>` : ''}
+      ${state.instances.length ? `<details><summary>Einzelne Einträge für ${escapeHtml(d.username)} sperren</summary>${renderBlacklistTree(state.instances, d, typeLabel)}</details>` : ''}
     </div>`;
+  }).join('');
+}
+
+// Baut den Blacklist-Baum Typ -> Category -> Instanzen fuer einen Arzt.
+function renderBlacklistTree(instances, doctor, typeLabel) {
+  // nach Typ, dann nach Category gruppieren
+  const byType = {};
+  for (const i of instances) {
+    (byType[i.type] ||= {});
+    const cat = i.category || 'uncategorized';
+    (byType[i.type][cat] ||= { label: i.categoryLabel || cat, items: [] }).items.push(i);
+  }
+  return Object.keys(byType).map((type) => {
+    const cats = byType[type];
+    let total = 0;
+    let blocked = 0;
+    const catBlocks = Object.keys(cats).map((cat) => {
+      const g = cats[cat];
+      const rows = g.items.map((i) => {
+        const key = `${i.type}/${i.id}`;
+        const isBlocked = doctor.blacklist.includes(key);
+        total++;
+        if (isBlocked) blocked++;
+        return `<label class="bl-row"><input type="checkbox" data-doc="${doctor.id}" data-rt="${i.type}" data-rid="${i.id}" ${isBlocked ? 'checked' : ''}/> <span>${escapeHtml(i.label)}</span> <span class="tag">${key}</span></label>`;
+      }).join('');
+      return `<div class="bl-cat"><div class="bl-cat-head">${escapeHtml(g.label)}</div><div class="bl-list">${rows}</div></div>`;
+    }).join('');
+    const badge = blocked ? ` <span class="bl-count">${blocked} gesperrt</span>` : '';
+    return `<details class="bl-type"><summary class="bl-type-head">${escapeHtml(typeLabel[type] || type)} <span class="tag">${total}</span>${badge}</summary>${catBlocks}</details>`;
   }).join('');
 }
 
