@@ -123,17 +123,25 @@ function renderAccess(state) {
     const toggles = state.types.map((t) =>
       `<label class="scope-toggle"><input type="checkbox" data-doc="${d.id}" data-type="${t.key}" ${d.scopes.includes(t.key) ? 'checked' : ''}/> ${t.label}</label>`
     ).join('');
+    // Sperrliste nur fuer Typen, die dem Arzt freigegeben wurden; ist nichts freigegeben,
+    // entfaellt der ganze "Einzelne Einträge sperren"-Block.
+    const blacklistTree = renderBlacklistTree(state.instances, d, typeLabel);
     return `<div class="card access-doc">
       <div class="card-title">${escapeHtml(d.name)} <span class="tag">${escapeHtml(d.username)}</span></div>
       <div class="scope-row">${toggles}</div>
-      ${state.instances.length ? `<details><summary>Einzelne Einträge für ${escapeHtml(d.username)} sperren</summary>${renderBlacklistTree(state.instances, d, typeLabel)}</details>` : ''}
+      ${blacklistTree ? `<details><summary>Einzelne Einträge für ${escapeHtml(d.username)} sperren</summary>${blacklistTree}</details>` : ''}
     </div>`;
   }).join('');
 }
 
 // Baut den Blacklist-Baum Typ -> Category -> Instanzen fuer einen Arzt.
+// Freigegebene Typen zeigen die Kategorien mit Instanz-Checkboxen. Nicht freigegebene
+// Typen erscheinen ebenfalls, aber mit einem Hinweis: ohne Freigabe sind ohnehin ALLE
+// Eintraege gesperrt — man muss erst freigeben, um einzelne Instanzen sperren zu koennen.
 function renderBlacklistTree(instances, doctor, typeLabel) {
-  // nach Typ, dann nach Category gruppieren
+  if (instances.length === 0) return '';
+  const granted = new Set(doctor.scopes || []);
+  // nach Typ, dann nach Category gruppieren (alle Typen, auch nicht freigegebene)
   const byType = {};
   for (const i of instances) {
     (byType[i.type] ||= {});
@@ -142,21 +150,30 @@ function renderBlacklistTree(instances, doctor, typeLabel) {
   }
   return Object.keys(byType).map((type) => {
     const cats = byType[type];
-    let total = 0;
+    const label = escapeHtml(typeLabel[type] || type);
+    const total = Object.values(cats).reduce((n, g) => n + g.items.length, 0);
+
+    // Typ nicht freigegeben -> Arzt sieht ohnehin nichts; kein gezieltes Einzel-Sperren.
+    if (!granted.has(type)) {
+      return `<details class="bl-type bl-type-locked"><summary class="bl-type-head">${label} <span class="tag">${total}</span> <span class="bl-locked-badge">nicht freigegeben</span></summary>
+        <div class="bl-locked-note">„${label}" ist für diesen Arzt nicht freigegeben – <strong>alle ${total} Einträge sind gesperrt</strong>. Gib zuerst die Freigabe oben, um einzelne Einträge gezielt sperren zu können.</div>
+      </details>`;
+    }
+
+    // freigegeben -> Kategorien mit Instanz-Checkboxen
     let blocked = 0;
     const catBlocks = Object.keys(cats).map((cat) => {
       const g = cats[cat];
       const rows = g.items.map((i) => {
         const key = `${i.type}/${i.id}`;
         const isBlocked = doctor.blacklist.includes(key);
-        total++;
         if (isBlocked) blocked++;
         return `<label class="bl-row"><input type="checkbox" data-doc="${doctor.id}" data-rt="${i.type}" data-rid="${i.id}" ${isBlocked ? 'checked' : ''}/> <span>${escapeHtml(i.label)}</span> <span class="tag">${key}</span></label>`;
       }).join('');
       return `<div class="bl-cat"><div class="bl-cat-head">${escapeHtml(g.label)}</div><div class="bl-list">${rows}</div></div>`;
     }).join('');
     const badge = blocked ? ` <span class="bl-count">${blocked} gesperrt</span>` : '';
-    return `<details class="bl-type"><summary class="bl-type-head">${escapeHtml(typeLabel[type] || type)} <span class="tag">${total}</span>${badge}</summary>${catBlocks}</details>`;
+    return `<details class="bl-type"><summary class="bl-type-head">${label} <span class="tag">${total}</span>${badge}</summary>${catBlocks}</details>`;
   }).join('');
 }
 
@@ -361,15 +378,21 @@ $('#access-doctors').addEventListener('change', async (e) => {
       const doc = el.dataset.doc;
       const types = [...document.querySelectorAll(`#access-doctors input[data-type][data-doc="${doc}"]`)]
         .filter((c) => c.checked).map((c) => c.dataset.type);
-      await fetch('/api/access/grant', {
+      const res = await fetch('/api/access/grant', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ doctorId: doc, scopes: types }),
       });
+      if (!res.ok) throw new Error('grant fehlgeschlagen');
+      // Die Sperrliste haengt an den Freigaben: Panel neu laden, damit die Kategorie
+      // sofort erscheint/verschwindet und serverseitig aufgeraeumte Sperren wegfallen.
+      await loadAccessState();
+      return;
     } else if (el.dataset.rt) {
-      await fetch('/api/access/blacklist', {
+      const res = await fetch('/api/access/blacklist', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ doctorId: el.dataset.doc, resourceType: el.dataset.rt, resourceId: el.dataset.rid, blocked: el.checked }),
       });
+      if (!res.ok) throw new Error('blacklist fehlgeschlagen');
     }
   } catch {
     el.checked = !el.checked; // bei Fehler zuruecksetzen
