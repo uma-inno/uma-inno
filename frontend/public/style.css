@@ -473,6 +473,32 @@ summary { cursor: pointer; color: var(--text-dim); font-size: 0.85rem; }
 
 .app-foot { text-align: center; color: var(--text-mute); font-size: 0.72rem; padding: 0.5rem 1.5rem 2rem; }
 
+/* ---------- Skeleton-Loader (Freigaben) ---------- */
+.sk-card { pointer-events: none; }
+.sk {
+  display: inline-block;
+  border-radius: 6px;
+  background: linear-gradient(100deg,
+    var(--surface) 30%,
+    var(--border) 50%,
+    var(--surface) 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+.sk-title { height: 15px; width: 45%; margin-bottom: 0.2rem; }
+.sk-toggle { height: 30px; width: 92px; border-radius: 999px; }
+.sk-line { height: 13px; width: 60%; margin-top: 0.9rem; border-radius: 6px; }
+.sk-status { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1.1rem; padding-bottom: 0.9rem; border-bottom: 1px solid var(--border); }
+.sk-status .sk-line { margin-top: 0; }
+.sk-pill { height: 24px; width: 90px; border-radius: 999px; }
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; }
+}
+
 /* ---------- Animationen ---------- */
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: none; } }

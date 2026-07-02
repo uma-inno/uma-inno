@@ -101,7 +101,7 @@ function updateAccessPanel(mode) {
 
 async function loadAccessState() {
   const host = $('#access-doctors');
-  host.innerHTML = '<div class="placeholder">Lade Freigaben…</div>';
+  host.innerHTML = accessSkeleton();
   try {
     const res = await fetch('/api/access/state');
     if (!res.ok) { host.innerHTML = '<div class="denied-box">Freigaben konnten nicht geladen werden.</div>'; return; }
@@ -109,6 +109,30 @@ async function loadAccessState() {
   } catch {
     host.innerHTML = '<div class="denied-box">Fehler beim Laden der Freigaben.</div>';
   }
+}
+
+// Platzhalter-Skelett, das die Struktur der Freigabe-Karten andeutet, waehrend
+// /api/access/state laedt (Login-Aufloesung + UMA-Dance je Ressourcentyp dauern kurz).
+function accessSkeleton(cards = 2) {
+  const toggles = Array.from({ length: 4 }, () => '<span class="sk sk-toggle"></span>').join('');
+  const card = `<div class="card access-doc sk-card" aria-hidden="true">
+      <div class="sk sk-title"></div>
+      <div class="scope-row">${toggles}</div>
+      <div class="sk sk-line"></div>
+    </div>`;
+  return Array.from({ length: cards }, () => card).join('');
+}
+
+// Platzhalter-Skelett fuers Ergebnis-Panel (Patientendaten), waehrend der UMA-Dance
+// laeuft (Access Token -> 401+Ticket -> RPT -> Zugriff). Deutet Statuszeile + Ergebniskarten an.
+function resultSkeleton(label, cards = 3) {
+  const card = `<div class="card sk-card" aria-hidden="true">
+      <div class="sk sk-title"></div>
+      <div class="sk sk-line"></div>
+    </div>`;
+  return `<h3>${escapeHtml(label)}</h3>
+    <div class="sk-status" aria-hidden="true"><span class="sk sk-pill"></span><span class="sk sk-line" style="width:35%"></span></div>
+    <div class="cards">${Array.from({ length: cards }, () => card).join('')}</div>`;
 }
 
 function renderAccess(state) {
@@ -385,7 +409,7 @@ document.querySelectorAll('.action').forEach((btn) => {
     }
     const path = btn.dataset.tmpl.replace('{id}', currentPatientId);
     const label = btn.dataset.label;
-    $('#result-panel').innerHTML = '<div class="placeholder">Lade…</div>';
+    $('#result-panel').innerHTML = resultSkeleton(label);
     try {
       const data = await fhirGet(path);
       renderResource(label, data);
