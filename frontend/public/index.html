@@ -3,41 +3,73 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UMA FHIR Demo</title>
+  <title>MyHealth Access · Patientengesteuerter Zugriff</title>
+  <meta name="theme-color" content="#0d9488" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <script>
+    // Theme vor dem ersten Paint setzen (kein Flackern): gespeicherte Wahl, sonst System-Praeferenz.
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t !== 'dark' && t !== 'light') {
+          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { /* localStorage nicht verfuegbar */ }
+    })();
+  </script>
 </head>
 <body>
   <!-- Login -->
   <div id="login-view" class="view">
     <div class="login-card">
-      <h1>UMA&nbsp;FHIR</h1>
-      <p class="subtitle">Patientengesteuerter Zugriff &middot; SMART on FHIR v2</p>
+      <div class="login-brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.6l6.8 2.9v5.2c0 4.3-2.9 7.8-6.8 9.3-3.9-1.5-6.8-5-6.8-9.3V5.5L12 2.6z" fill="currentColor" fill-opacity="0.18"/><path d="M12 2.6l6.8 2.9v5.2c0 4.3-2.9 7.8-6.8 9.3-3.9-1.5-6.8-5-6.8-9.3V5.5L12 2.6z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 8.4v5.2M9.4 11h5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </span>
+        <div>
+          <h1>MyHealth&nbsp;Access</h1>
+          <p class="subtitle">Patientengesteuerter Zugriff auf Gesundheitsdaten</p>
+        </div>
+      </div>
       <form id="login-form">
         <label>Benutzername
-          <input id="username" type="text" autocomplete="username" required />
+          <input id="username" type="text" autocomplete="username" placeholder="z. B. alice" required />
         </label>
         <label>Passwort
-          <input id="password" type="password" autocomplete="current-password" required />
+          <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
         </label>
         <button type="submit" class="btn-primary">Anmelden</button>
         <p id="login-error" class="error"></p>
       </form>
-      <div class="quick">
-        <span>Schnellauswahl:</span>
-        <button type="button" data-user="alice" data-pass="alice123" class="chip chip-patient">alice (Patient)</button>
-        <button type="button" data-user="dr.smith" data-pass="smith123" class="chip chip-doctor">dr.smith (Arzt)</button>
-        <button type="button" data-user="dr.bob" data-pass="bob123" class="chip chip-doctor">dr.bob (Arzt)</button>
-      </div>
+      <p class="login-foot">Abgesichert mit User-Managed Access · SMART on FHIR v2</p>
     </div>
   </div>
 
   <!-- App -->
   <div id="app-view" class="view hidden">
     <header class="topbar">
-      <div class="brand">UMA&nbsp;FHIR</div>
+      <div class="brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.6l6.8 2.9v5.2c0 4.3-2.9 7.8-6.8 9.3-3.9-1.5-6.8-5-6.8-9.3V5.5L12 2.6z" fill="currentColor" fill-opacity="0.18"/><path d="M12 2.6l6.8 2.9v5.2c0 4.3-2.9 7.8-6.8 9.3-3.9-1.5-6.8-5-6.8-9.3V5.5L12 2.6z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 8.4v5.2M9.4 11h5.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </span>
+        <span class="brand-name">MyHealth&nbsp;Access</span>
+      </div>
       <div class="userinfo">
-        <span id="who"></span>
-        <span id="roles" class="role-badges"></span>
+        <div class="user-chip">
+          <span id="avatar" class="avatar" aria-hidden="true"></span>
+          <div class="user-meta">
+            <span id="who" class="user-name"></span>
+            <span id="roles" class="role-badges"></span>
+          </div>
+        </div>
+        <button id="theme-toggle" class="btn-icon" type="button" aria-label="Hell-/Dunkelmodus umschalten" title="Hell-/Dunkelmodus umschalten">
+          <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></svg>
+        </button>
         <button id="logout" class="btn-ghost">Abmelden</button>
       </div>
     </header>
@@ -52,29 +84,41 @@
           <select id="patient-select"></select>
         </label>
         <h2 id="patient-heading">Patient</h2>
-        <p class="hint">Wähle eine Aktion. Das Ergebnis zeigt den UMA-Flow und die Durchsetzung.</p>
-        <button class="action" data-tmpl="Patient/{id}" data-label="Patientendaten lesen">👤 Patientendaten</button>
-        <button class="action" data-tmpl="Condition?patient={id}" data-label="Diagnosen (Conditions)">🩺 Diagnosen</button>
-        <button class="action" data-tmpl="MedicationStatement?patient={id}" data-label="Medikation">💊 Medikation</button>
-        <button class="action" data-tmpl="AllergyIntolerance?patient={id}" data-label="Allergien">⚠️ Allergien</button>
-        <button class="action action-summary" data-tmpl="Patient/{id}/$summary" data-label="IPS Patient Summary">📄 $summary (IPS)</button>
+        <p class="hint">Wähle eine Aktion, um die zugehörigen Daten anzuzeigen.</p>
+        <div class="action-group">
+          <button class="action" data-tmpl="Patient/{id}" data-label="Patientendaten">
+            <span class="action-ico">👤</span><span class="action-label">Patientendaten</span>
+          </button>
+          <button class="action" data-tmpl="Condition?patient={id}" data-label="Diagnosen (Conditions)">
+            <span class="action-ico">🩺</span><span class="action-label">Diagnosen</span>
+          </button>
+          <button class="action" data-tmpl="MedicationStatement?patient={id}" data-label="Medikation">
+            <span class="action-ico">💊</span><span class="action-label">Medikation</span>
+          </button>
+          <button class="action" data-tmpl="AllergyIntolerance?patient={id}" data-label="Allergien">
+            <span class="action-ico">⚠️</span><span class="action-label">Allergien</span>
+          </button>
+          <button class="action action-summary" data-tmpl="Patient/{id}/$summary" data-label="IPS Patient Summary">
+            <span class="action-ico">📄</span><span class="action-label">Patientenkurzakte (IPS)</span>
+          </button>
+        </div>
       </aside>
 
       <section class="content">
         <div id="access-panel" class="access-panel hidden">
-          <h3>Zugriffsverwaltung — meine Freigaben</h3>
-          <p class="hint">Gib Ärzten Lesezugriff auf deine Daten frei oder sperre einzelne Einträge. Änderungen wirken sofort.</p>
+          <div class="panel-head">
+            <h3>Meine Freigaben</h3>
+            <p class="hint">Gib Ärzten Lesezugriff auf deine Daten frei oder sperre einzelne Einträge. Änderungen wirken sofort.</p>
+          </div>
           <div id="access-doctors"></div>
         </div>
-        <div id="flow" class="flow hidden">
-          <h3>UMA-Flow</h3>
-          <ol id="flow-steps"></ol>
-        </div>
         <div id="result-panel" class="result-panel">
-          <div class="placeholder">Noch keine Anfrage. Wähle links eine Aktion.</div>
+          <div class="placeholder">Noch keine Anfrage — wähle links eine Aktion, um Daten anzuzeigen.</div>
         </div>
       </section>
     </main>
+
+    <footer class="app-foot">UMA-geschützter FHIR-Server · Demo-Umgebung</footer>
   </div>
 
   <script src="app.js"></script>

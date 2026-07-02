@@ -24,6 +24,8 @@ function showApp(me) {
   $('#login-view').classList.add('hidden');
   $('#app-view').classList.remove('hidden');
   $('#who').textContent = me.username;
+  const avatar = $('#avatar');
+  if (avatar) avatar.textContent = (me.username || '?').trim().slice(0, 2).toUpperCase();
   $('#roles').innerHTML = me.roles
     .map((r) => `<span class="badge badge-${r}">${r}</span>`)
     .join('');
@@ -99,7 +101,7 @@ function updateAccessPanel(mode) {
 
 async function loadAccessState() {
   const host = $('#access-doctors');
-  host.innerHTML = '<div class="placeholder">Lade Freigaben…</div>';
+  host.innerHTML = accessSkeleton();
   try {
     const res = await fetch('/api/access/state');
     if (!res.ok) { host.innerHTML = '<div class="denied-box">Freigaben konnten nicht geladen werden.</div>'; return; }
@@ -107,6 +109,30 @@ async function loadAccessState() {
   } catch {
     host.innerHTML = '<div class="denied-box">Fehler beim Laden der Freigaben.</div>';
   }
+}
+
+// Platzhalter-Skelett, das die Struktur der Freigabe-Karten andeutet, waehrend
+// /api/access/state laedt (Login-Aufloesung + UMA-Dance je Ressourcentyp dauern kurz).
+function accessSkeleton(cards = 2) {
+  const toggles = Array.from({ length: 4 }, () => '<span class="sk sk-toggle"></span>').join('');
+  const card = `<div class="card access-doc sk-card" aria-hidden="true">
+      <div class="sk sk-title"></div>
+      <div class="scope-row">${toggles}</div>
+      <div class="sk sk-line"></div>
+    </div>`;
+  return Array.from({ length: cards }, () => card).join('');
+}
+
+// Platzhalter-Skelett fuers Ergebnis-Panel (Patientendaten), waehrend der UMA-Dance
+// laeuft (Access Token -> 401+Ticket -> RPT -> Zugriff). Deutet Statuszeile + Ergebniskarten an.
+function resultSkeleton(label, cards = 3) {
+  const card = `<div class="card sk-card" aria-hidden="true">
+      <div class="sk sk-title"></div>
+      <div class="sk sk-line"></div>
+    </div>`;
+  return `<h3>${escapeHtml(label)}</h3>
+    <div class="sk-status" aria-hidden="true"><span class="sk sk-pill"></span><span class="sk sk-line" style="width:35%"></span></div>
+    <div class="cards">${Array.from({ length: cards }, () => card).join('')}</div>`;
 }
 
 function renderAccess(state) {
@@ -123,17 +149,25 @@ function renderAccess(state) {
     const toggles = state.types.map((t) =>
       `<label class="scope-toggle"><input type="checkbox" data-doc="${d.id}" data-type="${t.key}" ${d.scopes.includes(t.key) ? 'checked' : ''}/> ${t.label}</label>`
     ).join('');
+    // Sperrliste nur fuer Typen, die dem Arzt freigegeben wurden; ist nichts freigegeben,
+    // entfaellt der ganze "Einzelne Einträge sperren"-Block.
+    const blacklistTree = renderBlacklistTree(state.instances, d, typeLabel);
     return `<div class="card access-doc">
       <div class="card-title">${escapeHtml(d.name)} <span class="tag">${escapeHtml(d.username)}</span></div>
       <div class="scope-row">${toggles}</div>
-      ${state.instances.length ? `<details><summary>Einzelne Einträge für ${escapeHtml(d.username)} sperren</summary>${renderBlacklistTree(state.instances, d, typeLabel)}</details>` : ''}
+      ${blacklistTree ? `<details><summary>Einzelne Einträge für ${escapeHtml(d.username)} sperren</summary>${blacklistTree}</details>` : ''}
     </div>`;
   }).join('');
 }
 
 // Baut den Blacklist-Baum Typ -> Category -> Instanzen fuer einen Arzt.
+// Freigegebene Typen zeigen die Kategorien mit Instanz-Checkboxen. Nicht freigegebene
+// Typen erscheinen ebenfalls, aber mit einem Hinweis: ohne Freigabe sind ohnehin ALLE
+// Eintraege gesperrt — man muss erst freigeben, um einzelne Instanzen sperren zu koennen.
 function renderBlacklistTree(instances, doctor, typeLabel) {
-  // nach Typ, dann nach Category gruppieren
+  if (instances.length === 0) return '';
+  const granted = new Set(doctor.scopes || []);
+  // nach Typ, dann nach Category gruppieren (alle Typen, auch nicht freigegebene)
   const byType = {};
   for (const i of instances) {
     (byType[i.type] ||= {});
@@ -142,21 +176,30 @@ function renderBlacklistTree(instances, doctor, typeLabel) {
   }
   return Object.keys(byType).map((type) => {
     const cats = byType[type];
-    let total = 0;
+    const label = escapeHtml(typeLabel[type] || type);
+    const total = Object.values(cats).reduce((n, g) => n + g.items.length, 0);
+
+    // Typ nicht freigegeben -> Arzt sieht ohnehin nichts; kein gezieltes Einzel-Sperren.
+    if (!granted.has(type)) {
+      return `<details class="bl-type bl-type-locked"><summary class="bl-type-head">${label} <span class="tag">${total}</span> <span class="bl-locked-badge">nicht freigegeben</span></summary>
+        <div class="bl-locked-note">„${label}" ist für diesen Arzt nicht freigegeben – <strong>alle ${total} Einträge sind gesperrt</strong>. Gib zuerst die Freigabe oben, um einzelne Einträge gezielt sperren zu können.</div>
+      </details>`;
+    }
+
+    // freigegeben -> Kategorien mit Instanz-Checkboxen
     let blocked = 0;
     const catBlocks = Object.keys(cats).map((cat) => {
       const g = cats[cat];
       const rows = g.items.map((i) => {
         const key = `${i.type}/${i.id}`;
         const isBlocked = doctor.blacklist.includes(key);
-        total++;
         if (isBlocked) blocked++;
         return `<label class="bl-row"><input type="checkbox" data-doc="${doctor.id}" data-rt="${i.type}" data-rid="${i.id}" ${isBlocked ? 'checked' : ''}/> <span>${escapeHtml(i.label)}</span> <span class="tag">${key}</span></label>`;
       }).join('');
       return `<div class="bl-cat"><div class="bl-cat-head">${escapeHtml(g.label)}</div><div class="bl-list">${rows}</div></div>`;
     }).join('');
     const badge = blocked ? ` <span class="bl-count">${blocked} gesperrt</span>` : '';
-    return `<details class="bl-type"><summary class="bl-type-head">${escapeHtml(typeLabel[type] || type)} <span class="tag">${total}</span>${badge}</summary>${catBlocks}</details>`;
+    return `<details class="bl-type"><summary class="bl-type-head">${label} <span class="tag">${total}</span>${badge}</summary>${catBlocks}</details>`;
   }).join('');
 }
 
@@ -170,31 +213,6 @@ function showLogin() {
 async function fhirGet(fhirPath) {
   const res = await fetch('/api/fhir/' + fhirPath);
   return res.json();
-}
-
-// ---------- Flow-Anzeige ----------
-function renderFlow(steps) {
-  const flow = $('#flow');
-  const list = $('#flow-steps');
-  if (!steps || steps.length === 0) {
-    flow.classList.add('hidden');
-    return;
-  }
-  flow.classList.remove('hidden');
-  list.innerHTML = steps
-    .map((s) => {
-      let cls = 'warn';
-      if (s.status === 200) cls = 'ok';
-      else if (s.status === 401 || s.status === 403 || s.status === 'access_denied') cls = 'deny';
-      let html = `<li><span class="dot ${cls}"></span>${s.step} <strong>${s.status}</strong></li>`;
-      if (s.scopes && s.scopes.length) {
-        html += `<div class="flow-scopes">RPT-Scopes: ${s.scopes
-          .map((sc) => `<code>${sc}</code>`)
-          .join('')}</div>`;
-      }
-      return html;
-    })
-    .join('');
 }
 
 // ---------- Ergebnis-Rendering ----------
@@ -227,10 +245,7 @@ function renderResource(label, data) {
   panel.innerHTML =
     `<h3>${label}</h3>` +
     statusPill(status) +
-    body +
-    `<details><summary>Rohes FHIR-JSON anzeigen</summary><pre>${escapeHtml(
-      JSON.stringify(data.resource, null, 2)
-    )}</pre></details>`;
+    body;
 }
 
 function renderSingle(r) {
@@ -287,12 +302,10 @@ function renderSummary(bundle) {
   }
 
   const sections = comp.section || [];
-  const presentTypes = new Set();
   let html = '';
   for (const sec of sections) {
     const loinc = sec.code?.coding?.[0]?.code || '';
     const entries = sec.entry || [];
-    presentTypes.add(sec.title);
     html += `<div class="ips-section"><h4>${escapeHtml(sec.title)} <span class="loinc">LOINC ${loinc}</span></h4>`;
     if (entries.length === 0) {
       html += '<div class="ips-empty">Keine Einträge.</div>';
@@ -307,11 +320,6 @@ function renderSummary(bundle) {
     html += '</div>';
   }
 
-  const allSections = ['Problems', 'Allergies and Intolerances', 'Medication Summary'];
-  const omitted = allSections.filter((s) => !presentTypes.has(s));
-  if (omitted.length) {
-    html += `<div class="omitted-note">Weggelassene Sections (kein Scope in der Freigabe): <strong>${omitted.join(', ')}</strong></div>`;
-  }
   return html;
 }
 
@@ -323,24 +331,33 @@ function escapeHtml(str) {
 $('#login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#login-error').textContent = '';
+  const btn = e.target.querySelector('button[type="submit"]');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Anmelden…';
   try {
     const me = await login($('#username').value, $('#password').value);
     showApp(me);
   } catch (err) {
     $('#login-error').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
-});
-
-document.querySelectorAll('.quick .chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    $('#username').value = chip.dataset.user;
-    $('#password').value = chip.dataset.pass;
-  });
 });
 
 $('#logout').addEventListener('click', async () => {
   await fetch('/api/logout', { method: 'POST' });
   showLogin();
+});
+
+// ---------- Theme (Hell/Dunkel) ----------
+// Der Ausgangswert wird bereits im <head> gesetzt (kein Flackern); hier nur das Umschalten.
+$('#theme-toggle')?.addEventListener('click', () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const next = isDark ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('theme', next); } catch { /* localStorage nicht verfuegbar */ }
 });
 
 $('#patient-select').addEventListener('change', (e) => {
@@ -361,15 +378,21 @@ $('#access-doctors').addEventListener('change', async (e) => {
       const doc = el.dataset.doc;
       const types = [...document.querySelectorAll(`#access-doctors input[data-type][data-doc="${doc}"]`)]
         .filter((c) => c.checked).map((c) => c.dataset.type);
-      await fetch('/api/access/grant', {
+      const res = await fetch('/api/access/grant', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ doctorId: doc, scopes: types }),
       });
+      if (!res.ok) throw new Error('grant fehlgeschlagen');
+      // Die Sperrliste haengt an den Freigaben: Panel neu laden, damit die Kategorie
+      // sofort erscheint/verschwindet und serverseitig aufgeraeumte Sperren wegfallen.
+      await loadAccessState();
+      return;
     } else if (el.dataset.rt) {
-      await fetch('/api/access/blacklist', {
+      const res = await fetch('/api/access/blacklist', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ doctorId: el.dataset.doc, resourceType: el.dataset.rt, resourceId: el.dataset.rid, blocked: el.checked }),
       });
+      if (!res.ok) throw new Error('blacklist fehlgeschlagen');
     }
   } catch {
     el.checked = !el.checked; // bei Fehler zuruecksetzen
@@ -386,11 +409,9 @@ document.querySelectorAll('.action').forEach((btn) => {
     }
     const path = btn.dataset.tmpl.replace('{id}', currentPatientId);
     const label = btn.dataset.label;
-    $('#result-panel').innerHTML = '<div class="placeholder">Lade…</div>';
-    renderFlow([]);
+    $('#result-panel').innerHTML = resultSkeleton(label);
     try {
       const data = await fhirGet(path);
-      renderFlow(data.steps);
       renderResource(label, data);
     } catch (err) {
       $('#result-panel').innerHTML = `<div class="denied-box">Fehler: ${err.message}</div>`;

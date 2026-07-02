@@ -288,45 +288,36 @@ async function fhirRequest(session, method, fhirPath, rpt) {
   return fetch(`${FHIR_BASE}/${fhirPath}`, { method, headers });
 }
 
-// Fuehrt eine GET-FHIR-Anfrage inkl. vollem UMA-Flow aus und liefert
-// { status, steps, payload }. Wird vom Proxy-Endpoint UND von der
+// Fuehrt eine GET-FHIR-Anfrage inkl. vollem UMA-Dance aus und liefert
+// { status, payload }. Wird vom Proxy-Endpoint UND von der
 // Login-Patientenaufloesung verwendet.
 async function umaFetch(session, fhirPath) {
-  const steps = [];
   // Access Token bei Bedarf erneuern, bevor der UMA-Flow startet
   const fresh = await ensureFreshToken(session);
   if (!fresh) {
-    return { status: 440, steps, payload: { error: 'Sitzung abgelaufen. Bitte neu anmelden.' } };
+    return { status: 440, payload: { error: 'Sitzung abgelaufen. Bitte neu anmelden.' } };
   }
   // Schritt 1: Versuch mit dem Access Token (loest 401 + Permission Ticket aus)
   let response = await fhirRequest(session, 'GET', fhirPath, null);
-  steps.push({ step: 'Access Token', status: response.status });
 
   if (response.status === 401) {
     const wwwAuth = response.headers.get('www-authenticate') || '';
     const ticketMatch = wwwAuth.match(/ticket="([^"]+)"/);
     if (ticketMatch) {
-      steps.push({ step: 'Permission Ticket erhalten', status: 401 });
+      // Schritt 2/3: Permission Ticket gegen RPT tauschen
       const rpt = await exchangeTicket(session, ticketMatch[1]);
       if (!rpt) {
-        steps.push({ step: 'RPT-Austausch', status: 'access_denied' });
-        return { status: 403, steps, payload: { error: 'Keycloak verweigert RPT (access_denied)' } };
+        return { status: 403, payload: { error: 'Keycloak verweigert RPT (access_denied)' } };
       }
-      const rptClaims = decodeJwt(rpt);
-      const rptScopes = (rptClaims.authorization?.permissions || [])
-        .flatMap((p) => (p.scopes || []).map((s) => `${p.rsname}: ${s}`));
-      steps.push({ step: 'RPT erhalten', status: 200, scopes: rptScopes });
-
       // Schritt 4: erneuter Zugriff mit RPT
       response = await fhirRequest(session, 'GET', fhirPath, rpt);
-      steps.push({ step: 'Zugriff mit RPT', status: response.status });
     }
   }
 
   const text = await response.text();
   let payload;
   try { payload = JSON.parse(text); } catch { payload = text; }
-  return { status: response.status, steps, payload };
+  return { status: response.status, payload };
 }
 
 // --- Generischer FHIR-Proxy mit UMA-Dance ---
@@ -337,9 +328,9 @@ app.get('/api/fhir/*', async (req, res) => {
   const fhirPath = req.params[0] + (req._parsedUrl.search || '');
   try {
     const result = await umaFetch(req.session, fhirPath);
-    res.status(result.status).json({ status: result.status, steps: result.steps, resource: result.payload });
+    res.status(result.status).json({ status: result.status, resource: result.payload });
   } catch (e) {
-    res.status(502).json({ error: 'FHIR-Server nicht erreichbar: ' + e.message, steps: [] });
+    res.status(502).json({ error: 'FHIR-Server nicht erreichbar: ' + e.message });
   }
 });
 
@@ -429,6 +420,23 @@ async function listBlacklistNames(adminToken) {
   const list = (await adminJson(adminToken, `${AUTHZ(cuid)}/policy?name=Blacklist-&max=500`)) || [];
   return new Set(list.filter((p) => p.name.startsWith('Blacklist-')).map((p) => p.name));
 }
+// Loescht Instanz-Sperren (Blacklist-Marker) fuer (patient, arzt), deren Typ NICHT in
+// keepTypes steht. Wird beim Entziehen eines Scopes aufgerufen: ohne Lese-Freigabe ergibt
+// eine Instanz-Sperre keinen Sinn, also raeumen wir die verwaisten Marker mit auf.
+// Namensschema: Blacklist-{patId}-{ResType}-{ResId}-{DocId} (DocId ist eine UUID mit '-').
+async function cleanupBlacklistForRevokedTypes(adminToken, patientId, docId, keepTypes) {
+  const prefix = `Blacklist-${patientId}-`;
+  const suffix = `-${docId}`;
+  const names = await listBlacklistNames(adminToken);
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !name.endsWith(suffix)) continue;
+    const rest = name.slice(prefix.length);         // "{ResType}-{ResId}-{DocId}"
+    const type = rest.slice(0, rest.indexOf('-'));  // "{ResType}"
+    if (type && !keepTypes.includes(type)) {
+      await deletePolicyByName(adminToken, name);
+    }
+  }
+}
 
 // --- Aktueller Freigabe-Zustand fuer den eigenen Patienten ---
 app.get('/api/access/state', async (req, res) => {
@@ -499,6 +507,8 @@ app.post('/api/access/grant', async (req, res) => {
 
     const permName = `Permission-Patient${patientId}-${doc.username}`;
     const trustName = `TrustList-Patient${patientId}-${doc.username}`;
+    // Verwaiste Instanz-Sperren fuer nicht mehr freigegebene Typen entfernen.
+    await cleanupBlacklistForRevokedTypes(adminToken, patientId, doc.id, types);
     if (types.length === 0) {
       await deletePolicyByName(adminToken, permName);
       await deletePolicyByName(adminToken, trustName);
