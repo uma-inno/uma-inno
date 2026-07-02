@@ -429,6 +429,23 @@ async function listBlacklistNames(adminToken) {
   const list = (await adminJson(adminToken, `${AUTHZ(cuid)}/policy?name=Blacklist-&max=500`)) || [];
   return new Set(list.filter((p) => p.name.startsWith('Blacklist-')).map((p) => p.name));
 }
+// Loescht Instanz-Sperren (Blacklist-Marker) fuer (patient, arzt), deren Typ NICHT in
+// keepTypes steht. Wird beim Entziehen eines Scopes aufgerufen: ohne Lese-Freigabe ergibt
+// eine Instanz-Sperre keinen Sinn, also raeumen wir die verwaisten Marker mit auf.
+// Namensschema: Blacklist-{patId}-{ResType}-{ResId}-{DocId} (DocId ist eine UUID mit '-').
+async function cleanupBlacklistForRevokedTypes(adminToken, patientId, docId, keepTypes) {
+  const prefix = `Blacklist-${patientId}-`;
+  const suffix = `-${docId}`;
+  const names = await listBlacklistNames(adminToken);
+  for (const name of names) {
+    if (!name.startsWith(prefix) || !name.endsWith(suffix)) continue;
+    const rest = name.slice(prefix.length);         // "{ResType}-{ResId}-{DocId}"
+    const type = rest.slice(0, rest.indexOf('-'));  // "{ResType}"
+    if (type && !keepTypes.includes(type)) {
+      await deletePolicyByName(adminToken, name);
+    }
+  }
+}
 
 // --- Aktueller Freigabe-Zustand fuer den eigenen Patienten ---
 app.get('/api/access/state', async (req, res) => {
@@ -499,6 +516,8 @@ app.post('/api/access/grant', async (req, res) => {
 
     const permName = `Permission-Patient${patientId}-${doc.username}`;
     const trustName = `TrustList-Patient${patientId}-${doc.username}`;
+    // Verwaiste Instanz-Sperren fuer nicht mehr freigegebene Typen entfernen.
+    await cleanupBlacklistForRevokedTypes(adminToken, patientId, doc.id, types);
     if (types.length === 0) {
       await deletePolicyByName(adminToken, permName);
       await deletePolicyByName(adminToken, trustName);
