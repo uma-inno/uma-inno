@@ -620,7 +620,18 @@ async function createKeycloakUser(adminToken, { username, password, firstName, l
     throw Object.assign(new Error(`Benutzername "${username}" existiert bereits`), { httpStatus: 409 });
   }
   if (!createRes.ok) {
-    throw new Error(`Keycloak-User konnte nicht angelegt werden (${createRes.status})`);
+    // Keycloaks Fehler-Body durchreichen (z.B. { errorMessage: "..." }), damit die
+    // Ursache (Passwort-Policy, ungueltiger Username, ...) sichtbar wird statt nur "400".
+    let detail = '';
+    try {
+      const body = await createRes.json();
+      detail = body?.errorMessage || body?.error_description || body?.error || '';
+    } catch { /* kein JSON-Body */ }
+    const status = createRes.status;
+    throw Object.assign(
+      new Error(`Keycloak-User konnte nicht angelegt werden (${status})${detail ? ': ' + detail : ''}`),
+      { httpStatus: status === 400 ? 400 : 502 }
+    );
   }
   // 2. UUID des neuen Users holen
   const found = await adminJson(adminToken, `${ADMIN_BASE}/users?username=${encodeURIComponent(username)}&exact=true`);
@@ -707,34 +718,21 @@ async function provisionUserWithRecord(req, roles, { username, password, firstNa
   }
 }
 
-// POST /api/admin/patients  { username, password, firstName, lastName, gender, birthDate, email? }
-// Legt KC-User (Rolle Patient) + verknuepfte FHIR-Patient-Ressource an.
-app.post('/api/admin/patients', async (req, res) => {
+// POST /api/admin/users  { role: 'patient'|'doctor', username, password, firstName, lastName, gender, birthDate, email? }
+// Konsolidierter Anlege-Endpoint (ein Panel mit Rollen-Auswahl). role='doctor' => Doctor+Patient.
+app.post('/api/admin/users', async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  const { username, password, firstName, lastName, gender, birthDate, email } = req.body || {};
+  const { role, username, password, firstName, lastName, gender, birthDate, email } = req.body || {};
   if (!username || !password || !lastName) {
     return res.status(400).json({ error: 'username, password und lastName sind erforderlich' });
   }
-  try {
-    const result = await provisionUserWithRecord(req, ['Patient'], { username, password, firstName, lastName, gender, birthDate, email });
-    res.status(201).json(result);
-  } catch (e) {
-    res.status(e.httpStatus || 502).json({ error: e.message });
+  if (role !== 'patient' && role !== 'doctor') {
+    return res.status(400).json({ error: "role muss 'patient' oder 'doctor' sein" });
   }
-});
-
-// POST /api/admin/doctors  { username, password, firstName, lastName, gender, birthDate, email? }
-// Legt KC-User (Rollen Doctor + Patient) + eigenen FHIR-Patient-Datensatz an — wie dr.smith/dr.bob.
-app.post('/api/admin/doctors', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const { username, password, firstName, lastName, gender, birthDate, email } = req.body || {};
-  if (!username || !password || !lastName) {
-    return res.status(400).json({ error: 'username, password und lastName sind erforderlich' });
-  }
+  const roles = role === 'doctor' ? ['Doctor', 'Patient'] : ['Patient'];
   try {
-    // Doctor + Patient: eigener Datensatz, damit die "Als Patient"-Sicht funktioniert.
-    const result = await provisionUserWithRecord(req, ['Doctor', 'Patient'], { username, password, firstName, lastName, gender, birthDate, email });
-    res.status(201).json(result);
+    const result = await provisionUserWithRecord(req, roles, { username, password, firstName, lastName, gender, birthDate, email });
+    res.status(201).json({ ...result, role });
   } catch (e) {
     res.status(e.httpStatus || 502).json({ error: e.message });
   }
@@ -754,6 +752,135 @@ app.get('/api/admin/patients', async (req, res) => {
     res.json({ patients });
   } catch (e) {
     res.status(502).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/users — alle verwaltbaren User (Patienten + Aerzte) mit Rolle, KC-UUID und
+// verknuepfter FHIR-Patient-ID. Administratoren werden als nicht loeschbar markiert.
+app.get('/api/admin/users', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const adminToken = await getAdminToken();
+    if (!adminToken) return res.status(502).json({ error: 'Kein Admin-Token' });
+
+    // Owner-UUID -> Patient-ID aus der Keycloak-Ressourcenliste
+    const patients = await listKeycloakPatients(adminToken);
+    const patientIdByOwner = {};
+    for (const p of patients) if (p.ownerId) patientIdByOwner[p.ownerId] = p.id;
+
+    // Rollen je User: ueber die Rollen-Mitgliederlisten (Doctor gewinnt fuer die Anzeige)
+    const doctorIds = new Set(((await adminJson(adminToken, `${ADMIN_BASE}/roles/Doctor/users?max=500`)) || []).map((u) => u.id));
+    const adminIds = new Set(((await adminJson(adminToken, `${ADMIN_BASE}/roles/Administrator/users?max=500`)) || []).map((u) => u.id));
+    const patientRoleUsers = (await adminJson(adminToken, `${ADMIN_BASE}/roles/Patient/users?max=500`)) || [];
+    const doctorRoleUsers = (await adminJson(adminToken, `${ADMIN_BASE}/roles/Doctor/users?max=500`)) || [];
+
+    // Union aus Patient- und Doctor-Rollen-Usern (Admin-only-User haben keinen Datensatz zum Verwalten)
+    const byId = {};
+    for (const u of [...patientRoleUsers, ...doctorRoleUsers]) byId[u.id] = u;
+
+    const currentSub = decodeJwt(req.session.accessToken).sub;
+    const users = Object.values(byId)
+      .map((u) => {
+        const isAdmin = adminIds.has(u.id);
+        const role = isAdmin ? 'Administrator' : (doctorIds.has(u.id) ? 'Doctor' : 'Patient');
+        return {
+          id: u.id,
+          username: u.username,
+          name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username,
+          role,
+          patientId: patientIdByOwner[u.id] || null,
+          deletable: !isAdmin && u.id !== currentSub,
+        };
+      })
+      .sort((a, b) => (a.role === b.role ? a.username.localeCompare(b.username) : a.role.localeCompare(b.role)));
+
+    res.json({ users });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// DELETE /api/admin/users/:userId — vollstaendiges Loeschen: FHIR (klinische Ressourcen +
+// Patient-Ressource) -> Keycloak (Owner-Permission/Policy, UMA-Ressource, Freigabe-/Blacklist-
+// Objekte) -> Keycloak-User. Best effort: Fehler werden gesammelt, nicht hart abgebrochen.
+// Administratoren und der eingeloggte User sind geschuetzt.
+app.delete('/api/admin/users/:userId', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { userId } = req.params;
+  const warnings = [];
+  try {
+    const adminToken = await getAdminToken();
+    if (!adminToken) return res.status(502).json({ error: 'Kein Admin-Token' });
+
+    // 1. Guards: nicht sich selbst, nicht andere Administratoren
+    if (userId === decodeJwt(req.session.accessToken).sub) {
+      return res.status(403).json({ error: 'Der eigene Account kann nicht geloescht werden' });
+    }
+    const target = await adminJson(adminToken, `${ADMIN_BASE}/users/${userId}`);
+    if (!target) return res.status(404).json({ error: 'User nicht gefunden' });
+    const targetRoles = (await adminJson(adminToken, `${ADMIN_BASE}/users/${userId}/role-mappings/realm`)) || [];
+    if (targetRoles.some((r) => r.name === 'Administrator')) {
+      return res.status(403).json({ error: 'Administratoren koennen nicht geloescht werden' });
+    }
+    const username = target.username;
+
+    // 2. Verknuepfte FHIR-Patient-Ressource + klinische Ressourcen loeschen (Admin-DELETE)
+    const patients = await listKeycloakPatients(adminToken);
+    const own = patients.find((p) => p.ownerId === userId);
+    if (own) {
+      const fresh = await ensureFreshToken(req.session);
+      if (!fresh) return res.status(440).json({ error: 'Sitzung abgelaufen. Bitte neu anmelden.' });
+      const authz = { Authorization: `Bearer ${req.session.accessToken}`, Accept: 'application/fhir+json' };
+
+      // klinische Ressourcen des Patienten sammeln und loeschen
+      for (const type of BLACKLISTABLE) {
+        const searchRes = await fetch(`${FHIR_BASE}/${type}?patient=${own.id}`, { headers: authz });
+        if (searchRes.ok) {
+          const bundle = await searchRes.json();
+          for (const entry of bundle.entry || []) {
+            const rid = entry.resource?.id;
+            if (rid) {
+              const d = await fetch(`${FHIR_BASE}/${type}/${rid}`, { method: 'DELETE', headers: authz });
+              if (!d.ok) warnings.push(`FHIR ${type}/${rid}: ${d.status}`);
+            }
+          }
+        }
+      }
+      // Patient-Ressource loeschen
+      const dp = await fetch(`${FHIR_BASE}/Patient/${own.id}`, { method: 'DELETE', headers: authz });
+      if (!dp.ok) warnings.push(`FHIR Patient/${own.id}: ${dp.status}`);
+    }
+
+    // 3. Keycloak-Objekte: Owner-Permission/Policy, UMA-Ressource, Freigabe-/Blacklist-Objekte
+    const cuid = await getClientUuid(adminToken);
+    if (own) {
+      await deletePolicyByName(adminToken, `Permission-Patient${own.id}-Owner-Full`).catch(() => {});
+    }
+    await deletePolicyByName(adminToken, `UserPolicy-Owner-${username}`).catch(() => {});
+    // Freigaben, die dieser User als Arzt erhalten hat: Permission-/TrustList-*-<username>
+    const allPolicies = (await adminJson(adminToken, `${AUTHZ(cuid)}/policy?max=1000`)) || [];
+    for (const pol of allPolicies) {
+      const n = pol.name || '';
+      if (n.endsWith(`-${username}`) && (n.startsWith('Permission-Patient') || n.startsWith('TrustList-Patient'))) {
+        await adminSend(adminToken, 'DELETE', `${AUTHZ(cuid)}/policy/${pol.id}`).catch(() => {});
+      }
+      // Blacklist-Marker, die diesen User (UUID) betreffen
+      if (n.startsWith('Blacklist-') && n.endsWith(`-${userId}`)) {
+        await adminSend(adminToken, 'DELETE', `${AUTHZ(cuid)}/policy/${pol.id}`).catch(() => {});
+      }
+    }
+    // UMA-Ressource Patient/<id> entfernen
+    if (own) {
+      await adminSend(adminToken, 'DELETE', `${AUTHZ(cuid)}/resource/${own.rsid}`).catch(() => {});
+    }
+
+    // 4. Keycloak-User loeschen
+    const du = await adminSend(adminToken, 'DELETE', `${ADMIN_BASE}/users/${userId}`);
+    if (!du.ok) return res.status(502).json({ error: `Keycloak-User konnte nicht geloescht werden (${du.status})`, warnings });
+
+    res.json({ ok: true, username, patientId: own?.id || null, warnings });
+  } catch (e) {
+    res.status(502).json({ error: e.message, warnings });
   }
 });
 
@@ -819,6 +946,65 @@ app.post('/api/admin/clinical', async (req, res) => {
       return res.status(fhirRes.status === 403 ? 403 : 502).json({ error: diag });
     }
     res.status(201).json({ ok: true, resourceType, id: payload?.id || null, patientId });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Leitet eine kurze Bezeichnung aus einer klinischen FHIR-Ressource ab (fuer die Admin-Liste).
+function clinicalLabel(r) {
+  if (!r) return '';
+  if (r.resourceType === 'MedicationStatement') {
+    return r.medication?.concept?.text || r.medicationCodeableConcept?.text || 'Medikament';
+  }
+  return r.code?.text || r.code?.coding?.[0]?.display || r.resourceType;
+}
+
+// GET /api/admin/clinical?patientId=<id> — listet die klinischen Ressourcen (Condition/
+// MedicationStatement/AllergyIntolerance) eines Patienten fuer die Admin-Verwaltung.
+app.get('/api/admin/clinical', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const patientId = String(req.query.patientId || '');
+  if (!patientId) return res.status(400).json({ error: 'patientId erforderlich' });
+  try {
+    const fresh = await ensureFreshToken(req.session);
+    if (!fresh) return res.status(440).json({ error: 'Sitzung abgelaufen. Bitte neu anmelden.' });
+    const authz = { Authorization: `Bearer ${req.session.accessToken}`, Accept: 'application/fhir+json' };
+    const items = [];
+    for (const type of BLACKLISTABLE) {
+      const searchRes = await fetch(`${FHIR_BASE}/${type}?patient=${encodeURIComponent(patientId)}`, { headers: authz });
+      if (!searchRes.ok) continue;
+      const bundle = await searchRes.json();
+      for (const entry of bundle.entry || []) {
+        const r = entry.resource;
+        if (r?.id) items.push({ type, id: r.id, label: clinicalLabel(r) });
+      }
+    }
+    res.json({ items });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// DELETE /api/admin/clinical/:resourceType/:id — loescht eine einzelne klinische Ressource.
+// Admin-Access-Token: der Interceptor laesst DELETE mit Administrator-Rolle durch (UMA-Bypass).
+app.delete('/api/admin/clinical/:resourceType/:id', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { resourceType, id } = req.params;
+  if (!BLACKLISTABLE.includes(resourceType)) {
+    return res.status(400).json({ error: 'gueltiger resourceType (Condition/MedicationStatement/AllergyIntolerance) erforderlich' });
+  }
+  try {
+    const fresh = await ensureFreshToken(req.session);
+    if (!fresh) return res.status(440).json({ error: 'Sitzung abgelaufen. Bitte neu anmelden.' });
+    const del = await fetch(`${FHIR_BASE}/${resourceType}/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${req.session.accessToken}`, Accept: 'application/fhir+json' },
+    });
+    if (!del.ok && del.status !== 404) {
+      return res.status(del.status === 403 ? 403 : 502).json({ error: `FHIR-Fehler (${del.status})` });
+    }
+    res.json({ ok: true, resourceType, id });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
