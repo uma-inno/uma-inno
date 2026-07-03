@@ -118,6 +118,25 @@ public class UmaKeycloakAuthInterceptor {
                 return; // Allow creation to proceed
             }
 
+            // FOURTH-B: Administrators bypass the UMA flow for managing clinical data. The admin has
+            // no owner permission on foreign patients, so a regular UMA request would fail; but the
+            // admin panel must be able to LIST (GET/search) and DELETE a patient's clinical resources
+            // (Condition/MedicationStatement/AllergyIntolerance). Patient reads are deliberately NOT
+            // bypassed — a pure admin has no patient-data view.
+            boolean isClinical = !"Patient".equals(resourceType);
+            boolean bypassableForAdmin = "DELETE".equals(httpMethod) || (isClinical && "GET".equals(httpMethod));
+            if (bypassableForAdmin) {
+                String authHeader = theRequestDetails.getHeader("Authorization");
+                if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    List<String> roles = extractRolesFromToken(authHeader.substring(7));
+                    boolean isAdmin = roles.stream().anyMatch(r -> "administrator".equals(r.toLowerCase()));
+                    if (isAdmin) {
+                        logger.info("✓ {} by Administrator — bypassing UMA enforcement for {}", httpMethod, resourceType);
+                        return; // Allow the operation to proceed
+                    }
+                }
+            }
+
             logger.info("Applying UMA authentication to {} resource", resourceType);
 
             // Ziel-Patient bestimmen: bei Patient direkt aus der URL, bei klinischen
