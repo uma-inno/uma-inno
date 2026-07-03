@@ -202,3 +202,5 @@ buildNumber.properties
 /docs/
 
 */node_modules/*
+
+*.bak
