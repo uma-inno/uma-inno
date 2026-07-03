@@ -2,7 +2,8 @@
 
 Architecture, UMA implementation, Keycloak configuration, API reference and the `$summary`
 operation for the UMA-protected FHIR server. For setup and troubleshooting see
-[../SETUP.md](../SETUP.md); for the project overview and test users see [../README.md](../README.md).
+[../SETUP.md](../SETUP.md); for the project overview and test users see [../README.md](../README.md);
+for known limitations and future work see [ROADMAP.md](ROADMAP.md).
 
 ## Contents
 
@@ -177,10 +178,16 @@ The FHIR server extracts `authorization.permissions` and checks that the request
 |------|-----------|----------|------------|
 | Patient | No | Own data only (via UMA) | No |
 | Doctor | Patient, Condition, AllergyIntolerance, MedicationStatement | Granted resources (via UMA) | No |
-| Administrator | All | All | All |
+| Administrator | All | All | All (UMA-bypass, see below) |
 
 Read/update/delete are governed by the UMA scope check, not by role alone. Which doctors may read
 which data is granted by each patient at runtime through the frontend.
+
+> **Administrator DELETE bypass:** an admin holds no owner permission on foreign patients, so a
+> normal UMA `DELETE` would fail — yet the admin panel must be able to remove any user's data. The
+> interceptor therefore short-circuits `DELETE` requests carrying the `Administrator` role and lets
+> them through without the UMA dance (`UmaKeycloakAuthInterceptor`, stage "FOURTH-B"). This is the
+> only role-based bypass of UMA enforcement; reads/updates for admins still go through UMA.
 
 ### SMART on FHIR v2 scope semantics (`scopeCovers`)
 A granted scope covers a required scope only when context and resource type match **and** the
@@ -200,9 +207,9 @@ Permission validation requires an exact resource-name match:
 | Patient | `keycloak-uuid` identifier in the Patient resource (resolved to the Keycloak user UUID) |
 | Condition, AllergyIntolerance, MedicationStatement | the referenced patient's Keycloak UUID |
 
-Ownership is expressed via Keycloak **user policies** (`UserPolicy-Alice`,
-`UserPolicy-Owner-bernd`, `UserPolicy-Owner-clara`, …) attached to the per-patient Owner-Full
-scope permission.
+Ownership is expressed via Keycloak **user policies** (`UserPolicy-Owner-<username>`) attached to
+the per-patient Owner-Full scope permission. These are created at runtime when the admin adds the
+patient/doctor.
 
 ---
 
@@ -238,49 +245,39 @@ patient/Condition.rs    patient/MedicationStatement.rs    patient/AllergyIntoler
 
 ### Authorization resources
 
-All registered at runtime by HAPI (`ResourceRegistrationInterceptor`) when the patients are
-seeded. Owner = the patient's Keycloak user; `ownerManagedAccess = false`.
+**Nothing is pre-seeded.** On a fresh install the realm has only the `admin` user and the HAPI DB
+is empty. When the admin creates a patient or doctor through the admin panel, HAPI
+(`ResourceRegistrationInterceptor`) registers a `Patient/<id>` UMA resource at runtime with the
+new user as owner, and the frontend proxy sets `ownerManagedAccess = false` plus the full SMART
+scope set on that resource.
 
 | Resource | Owner |
 |----------|-------|
-| `Patient/1` | alice |
-| `Patient/7` | bernd |
-| `Patient/11` | clara |
-| `Patient/<id>` | dr.smith (own record) |
-| `Patient/<id>` | dr.bob (own record) |
+| `Patient/<id>` | the patient/doctor created via the admin panel |
 
 ### Policies
 
-| Policy | Type | Description |
-|--------|------|-------------|
-| `RolePolicy-Doctor` | Role | Users with the Doctor role |
-| `UserPolicy-Alice` | User | Alice (owner of Patient/1) |
-| `UserPolicy-Owner-bernd` | User | Bernd (owner of Patient/7) |
-| `UserPolicy-Owner-clara` | User | Clara (owner of Patient/11) |
-| `UserPolicy-Owner-drsmith` / `-drbob` | User | dr.smith / dr.bob (own record) |
-
-> Trust-list policies for doctors are **not** pre-seeded — the patient creates them at runtime
-> through the frontend: `TrustList-Patient<id>-<doctor>` (see
-> [Patient-Controlled Sharing](#6-patient-controlled-sharing)).
+| Policy | Type | Description | Created |
+|--------|------|-------------|---------|
+| `RolePolicy-Doctor` | Role | Users with the Doctor role | realm export |
+| `UserPolicy-Owner-<username>` | User | Owner of a `Patient/<id>` record | at runtime, when the admin creates that patient/doctor |
+| `TrustList-Patient<id>-<doctor>` | User | A doctor the patient granted access to | at runtime, when the patient grants access in the frontend |
 
 ### Permissions (type: scope, AFFIRMATIVE)
 
-Only the Owner-Full permissions are pre-seeded (each patient's self-access):
+| Name | Resource | Scopes | Policies | Created |
+|------|----------|--------|----------|---------|
+| `Permission-Patient<id>-Owner-Full` | `Patient/<id>` | all 5 | `UserPolicy-Owner-<username>` | at runtime, on patient/doctor creation |
+| `Permission-Patient<id>-<doctor>` | `Patient/<id>` | granted subset | `TrustList-Patient<id>-<doctor>` + `RolePolicy-Doctor` | at runtime, when the patient grants access |
 
-| Name | Resource | Scopes | Policies |
-|------|----------|--------|----------|
-| `Permission-Patient1-Alice-Full` | Patient/1 | all 5 | UserPolicy-Alice |
-| `Permission-Patient7-Owner-Full` | Patient/7 | all 5 | UserPolicy-Owner-bernd |
-| `Permission-Patient11-Owner-Full` | Patient/11 | all 5 | UserPolicy-Owner-clara |
-| `Permission-Patient<id>-Owner-Full` | dr.smith / dr.bob | all 5 | UserPolicy-Owner-drsmith / -drbob |
+The **Owner-Full** permission is created automatically by the admin panel so the new user can
+immediately read their own record. **Doctor grants** are never pre-seeded — they appear only when
+a patient grants them in the frontend (see [Patient-Controlled Sharing](#6-patient-controlled-sharing)).
 
-**Doctor grants** are **not** pre-seeded — they appear only when a patient grants them in the
-frontend (see [Patient-Controlled Sharing](#6-patient-controlled-sharing)).
-
-**Demo takeaway:** initially **no** doctor has access to a foreign patient (`access_denied`). The
-patient grants specifically in the frontend — e.g. alice grants dr.smith "Diagnoses"
-(`patient/Condition.rs`) → dr.smith can then read alice's conditions; if alice blocks a single
-condition for dr.smith (blacklist), exactly that one drops out of the result. This demonstrates
+**Takeaway:** initially **no** doctor has access to a foreign patient (`access_denied`). A patient
+grants specifically in the frontend — e.g. grants a doctor "Diagnoses" (`patient/Condition.rs`) →
+that doctor can then read the patient's conditions; if the patient blocks a single condition for
+that doctor (blacklist), exactly that one drops out of the result. This demonstrates
 patient-controlled authorization.
 
 > **Decision Strategy = AFFIRMATIVE (not Unanimous):** several permissions share the same scope;
@@ -312,12 +309,14 @@ export.)
 
 - **Auto import (default):** the realm is imported from
   `keycloak-config/keycloak-files/fhir-auth-realm-export.json` on Keycloak startup
-  (`--import-realm`). This provides the base realm; the Patient resources and scope permissions
-  are created at runtime by `seed-fhir-data.ps1` + `setup-smart-v2-authz.ps1`.
+  (`--import-realm`). This provides the base realm with **only the `admin` user** plus the
+  SMART/UMA infrastructure (5 scopes, `RolePolicy-Doctor`, `uma_protection` default scope, Decision
+  Strategy AFFIRMATIVE). Patients, doctors, their FHIR resources, and owner permissions are created
+  at runtime through the admin panel.
 - **Rebuild from a bare realm:** if a realm **without** the authorization config is imported,
-  `setup-smart-v2-authz.ps1` builds it idempotently from scratch (patient users bernd/clara,
-  SMART-v2 scopes, role/user policies, per-patient scope permissions, `uma_protection` default
-  scope, Decision Strategy AFFIRMATIVE). Use `-CleanupLegacy` to remove leftover objects.
+  `setup-smart-v2-authz.ps1` rebuilds the infrastructure idempotently (SMART-v2 scopes,
+  `RolePolicy-Doctor`, `uma_protection` default scope, Decision Strategy AFFIRMATIVE). It creates
+  **no** users and **no** patient permissions.
 
 See [../SETUP.md](../SETUP.md) for the full sequence and troubleshooting.
 
@@ -386,31 +385,55 @@ The demo frontend (`http://localhost:3000`) runs the UMA dance server-side. Usef
 | `GET /api/access/state` | Own sharing state: doctors + granted read scopes + blacklist per instance (owner only) |
 | `POST /api/access/grant` `{doctorId, scopes[]}` | Set read scopes per type for a doctor; empty list = revoke (owner only) |
 | `POST /api/access/blacklist` `{doctorId, resourceType, resourceId, blocked}` | Block/unblock a single instance for a doctor (owner only) |
+| `GET /api/admin/patients` | List all patients for the admin's target-patient picker (admin only) |
+| `GET /api/admin/users` | List all manageable users (patients + doctors) with role, Keycloak UUID and linked FHIR patient id; admins are flagged `deletable:false` (admin only) |
+| `POST /api/admin/users` `{role:'patient'\|'doctor', username, password, firstName?, lastName, gender?, birthDate?, email?}` | Create a user: `patient` → Keycloak role `Patient`; `doctor` → roles `Doctor` + `Patient`. In both cases a linked FHIR record + owner full access are created (admin only) |
+| `DELETE /api/admin/users/:userId` | Fully delete a user: FHIR clinical resources + Patient record, then Keycloak owner permission/policy, UMA resource, trust-list/blacklist objects, then the Keycloak user. Best effort — collects `warnings`. Administrators and the logged-in user are protected (admin only) |
+| `POST /api/admin/clinical` `{patientId, resourceType, text, category?}` | Add a `Condition` / `MedicationStatement` / `AllergyIntolerance` for a patient (`category` only for `Condition`; admin only) |
 
 > The `/api/access/*` endpoints are the **patient-controlled** sharing management: the proxy
 > mutates Keycloak with an admin token after verifying the logged-in user owns their resource
 > (patient id from the session, never from the request). Details:
 > [Patient-Controlled Sharing](#6-patient-controlled-sharing).
 
+> The `/api/admin/*` endpoints are the **administrator onboarding & management** flow (require the
+> `Administrator` role). Creating a user (`POST /api/admin/users`) makes the Keycloak user, POSTs the
+> linked FHIR `Patient` (registered in Keycloak by the interceptor), then sets
+> `ownerManagedAccess=false` + the `Permission-Patient<id>-Owner-Full` scope permission so the new
+> user can read their own data. If the FHIR step fails, the half-created Keycloak user is rolled back.
+> `DELETE /api/admin/users/:userId` reverses this end-to-end (FHIR data → Keycloak authz objects →
+> user); it is best-effort and returns any partial-failure `warnings` rather than aborting. The
+> `Administrator` role and the currently logged-in admin are never deletable.
+
+> **Admin-only UI:** a pure administrator has no own FHIR record and no `Doctor` role. The frontend
+> detects this (`me.isAdmin && !me.isDoctor && !me.isPatient`) and sets `body.admin-only`, which hides
+> the patient/doctor sidebar (data actions, patient picker) and the result panel — the admin sees only
+> the three management panels (add user, manage/delete users, add clinical data). A user with both
+> `Doctor` and `Administrator` roles would still get the full patient/doctor sidebar in addition to the
+> admin panels.
+
+> The examples below use a patient `dora` (`Patient/153`) created via the admin panel. Substitute
+> your own username/id — a fresh install ships only with `admin`.
+
 ```bash
 curl -s -c cj.txt -X POST http://localhost:3000/api/login \
-  -H "Content-Type: application/json" -d '{"username":"dr.smith","password":"smith123"}'
-curl -s -b cj.txt http://localhost:3000/api/fhir/Patient/1            # -> {status:200, steps:[...], resource:{...}}
-curl -s -b cj.txt http://localhost:3000/api/fhir/Patient/1/\$summary  # IPS document bundle
+  -H "Content-Type: application/json" -d '{"username":"dora","password":"dora123"}'
+curl -s -b cj.txt http://localhost:3000/api/fhir/Patient/153            # -> {status:200, steps:[...], resource:{...}}
+curl -s -b cj.txt http://localhost:3000/api/fhir/Patient/153/\$summary  # IPS document bundle
 ```
 
 ### Keycloak endpoints
 
 **Base URL**: `http://localhost:8080/realms/FHIR-Auth`
 
-Get an access token:
+Get an access token (using a patient you created via the admin panel, e.g. `dora`):
 ```bash
 curl -X POST http://localhost:8080/realms/FHIR-Auth/protocol/openid-connect/token \
   -d "grant_type=password" \
   -d "client_id=fhir-client" \
   -d "client_secret=QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP" \
-  -d "username=alice" \
-  -d "password=alice123"
+  -d "username=dora" \
+  -d "password=dora123"
 ```
 
 Exchange a ticket for an RPT:
@@ -426,24 +449,25 @@ curl -X POST http://localhost:8080/realms/FHIR-Auth/protocol/openid-connect/toke
 ### Complete UMA flow example (direct, without the proxy)
 
 ```bash
+# (uses a patient `dora`/`Patient/153` created via the admin panel — substitute your own)
 # 1. Request with an access token → 401 + permission ticket
-curl -i -H "Authorization: Bearer $ALICE_TOKEN" http://localhost:8081/fhir/Patient/1
+curl -i -H "Authorization: Bearer $USER_TOKEN" http://localhost:8081/fhir/Patient/153
 # → HTTP 401, WWW-Authenticate: UMA realm="FHIR-Auth", as_uri="...", ticket="<TICKET>"
 
 # 2. Get a user token
-ALICE_TOKEN=$(curl -s -X POST \
+USER_TOKEN=$(curl -s -X POST \
   http://localhost:8080/realms/FHIR-Auth/protocol/openid-connect/token \
-  -d "grant_type=password&client_id=fhir-client&client_secret=QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP&username=alice&password=alice123" \
+  -d "grant_type=password&client_id=fhir-client&client_secret=QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP&username=dora&password=dora123" \
   | jq -r '.access_token')
 
 # 3. Exchange the ticket for an RPT
 RPT=$(curl -s -X POST \
   http://localhost:8080/realms/FHIR-Auth/protocol/openid-connect/token \
-  -d "grant_type=urn:ietf:params:oauth:grant-type:uma-ticket&ticket=<TICKET>&client_id=fhir-client&client_secret=QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP&subject_token=$ALICE_TOKEN" \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:uma-ticket&ticket=<TICKET>&client_id=fhir-client&client_secret=QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP&subject_token=$USER_TOKEN" \
   | jq -r '.access_token')
 
 # 4. Access the resource with the RPT
-curl -H "Authorization: Bearer $RPT" http://localhost:8081/fhir/Patient/1
+curl -H "Authorization: Bearer $RPT" http://localhost:8081/fhir/Patient/153
 ```
 
 ### Example responses
@@ -523,18 +547,19 @@ The summary is **permission-filtered**, reusing the same enforcement stages as t
 - **Stage 4 (blacklist):** individual instances revoked by the patient are filtered out; a section
   left empty gets an `emptyReason` of `unavailable`.
 
-### Example scenario (demo data)
+### Example scenario
 
-**Alice's data (Patient/1):** Conditions (Hypertension, Diabetes, Migraine), MedicationStatement
-(Metformin), AllergyIntolerance (Penicillin). Doctor access is **patient-controlled** — the
-results below assume alice has granted the respective scopes in the frontend.
+Take a patient created via the admin panel — say **dora** (`Patient/153`) — with a few Conditions,
+a MedicationStatement, and an AllergyIntolerance added through the "Add clinical data" panel. Doctor
+access is **patient-controlled**: the results below assume dora has granted the respective scopes to
+each doctor in the frontend.
 
-| Requester | Scopes on Patient/1 | `$summary` result |
-|-----------|---------------------|-------------------|
-| **alice** (owner) | all 5 | Composition + Patient + Problems + Allergies + Medications |
-| **dr.smith** | `patient/Patient.r` | Composition + Patient demographics only (no clinical sections) |
-| **dr.bob** | `patient/Condition.rs` | Composition + Patient + Problems (Conditions) only |
-| **dr.bob** (no grant) | _none_ | `403` (no read scope → ticket/RPT denied) |
+| Requester | Scopes on Patient/153 | `$summary` result |
+|-----------|-----------------------|-------------------|
+| **dora** (owner) | all 5 | Composition + Patient + Problems + Allergies + Medications |
+| **doctor A** | `patient/Patient.r` | Composition + Patient demographics only (no clinical sections) |
+| **doctor B** | `patient/Condition.rs` | Composition + Patient + Problems (Conditions) only |
+| **doctor B** (no grant) | _none_ | `403` (no read scope → ticket/RPT denied) |
 
 ### Extending the summary
 
