@@ -105,6 +105,97 @@
       </aside>
 
       <section class="content">
+        <div id="admin-panel" class="access-panel hidden">
+          <div class="panel-head">
+            <h3>Benutzer hinzufügen</h3>
+            <p class="hint">Legt einen neuen Login samt verknüpftem FHIR-Datensatz an.</p>
+          </div>
+          <form id="admin-add-user" class="admin-form">
+            <div class="admin-grid">
+              <label>Rolle*
+                <select id="nu-role">
+                  <option value="patient">Patient</option>
+                  <option value="doctor">Arzt</option>
+                </select>
+              </label>
+              <label>Benutzername*
+                <input id="nu-username" type="text" autocomplete="off" placeholder="z. B. dora / dr.wagner" required />
+              </label>
+              <label>Passwort*
+                <input id="nu-password" type="text" autocomplete="off" placeholder="Initialpasswort" required />
+              </label>
+              <label>Vorname
+                <input id="nu-firstname" type="text" autocomplete="off" placeholder="Dora" />
+              </label>
+              <label>Nachname*
+                <input id="nu-lastname" type="text" autocomplete="off" placeholder="Meier" required />
+              </label>
+              <label>Geschlecht
+                <select id="nu-gender">
+                  <option value="">—</option>
+                  <option value="female">weiblich</option>
+                  <option value="male">männlich</option>
+                  <option value="other">divers</option>
+                  <option value="unknown">unbekannt</option>
+                </select>
+              </label>
+              <label>Geburtsdatum
+                <input id="nu-birthdate" type="date" />
+              </label>
+            </div>
+            <div class="admin-actions">
+              <button type="submit" class="btn-primary">Benutzer anlegen</button>
+              <span id="nu-msg" class="admin-msg"></span>
+            </div>
+          </form>
+        </div>
+
+        <div id="admin-users-panel" class="access-panel hidden">
+          <div class="panel-head">
+            <h3>Benutzer verwalten</h3>
+            <p class="hint">Alle Patienten und Ärzte. Löschen entfernt Login, FHIR-Datensatz, klinische Daten und Freigaben vollständig.</p>
+          </div>
+          <div id="admin-users-list" class="admin-users"></div>
+        </div>
+
+        <div id="admin-clinical-panel" class="access-panel hidden">
+          <div class="panel-head">
+            <h3>Klinische Daten hinzufügen</h3>
+            <p class="hint">Fügt eine Diagnose, Medikation oder Allergie zu einem Patienten hinzu.</p>
+          </div>
+          <form id="admin-add-clinical" class="admin-form">
+            <div class="admin-grid">
+              <label>Patient*
+                <select id="nc-patient" required></select>
+              </label>
+              <label>Datentyp*
+                <select id="nc-type">
+                  <option value="Condition">Diagnose</option>
+                  <option value="MedicationStatement">Medikation</option>
+                  <option value="AllergyIntolerance">Allergie</option>
+                </select>
+              </label>
+              <label id="nc-cat-wrap">Kategorie
+                <select id="nc-category">
+                  <option value="problem-list-item">Problemliste</option>
+                  <option value="encounter-diagnosis">Behandlungsdiagnose</option>
+                </select>
+              </label>
+              <label class="admin-wide">Bezeichnung*
+                <input id="nc-text" type="text" autocomplete="off" placeholder="z. B. Hypertension / Metformin 500mg / Penicillin" required />
+              </label>
+            </div>
+            <div class="admin-actions">
+              <button type="submit" class="btn-primary">Daten anlegen</button>
+              <span id="nc-msg" class="admin-msg"></span>
+            </div>
+          </form>
+          <div class="admin-clinical-existing">
+            <h4>Vorhandene Einträge</h4>
+            <div id="admin-clinical-list" class="admin-users"></div>
+          </div>
+        </div>
+
         <div id="access-panel" class="access-panel hidden">
           <div class="panel-head">
             <h3>Meine Freigaben</h3>

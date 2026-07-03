@@ -29,7 +29,92 @@ function showApp(me) {
   $('#roles').innerHTML = me.roles
     .map((r) => `<span class="badge badge-${r}">${r}</span>`)
     .join('');
-  setupPatientContext(me);
+  // Reiner Admin-Account: nur Benutzerverwaltung, keine Patientendaten/-sicht.
+  // Ein Admin hat keinen eigenen Datensatz und keine Arzt-Rolle -> die gesamte
+  // Patient-/Arzt-Sidebar (Aktionen, Auswahl, Freigaben) entfaellt.
+  const adminOnly = me.isAdmin && !me.isDoctor && !me.isPatient;
+  document.body.classList.toggle('admin-only', adminOnly);
+  setupAdminPanel(me);
+  if (!adminOnly) setupPatientContext(me);
+}
+
+// Blendet die Admin-Panels (Benutzer anlegen, Benutzer verwalten, klinische Daten) nur fuer
+// Administratoren ein und laedt die Benutzerliste.
+function setupAdminPanel(me) {
+  for (const id of ['#admin-panel', '#admin-users-panel', '#admin-clinical-panel']) {
+    $(id)?.classList.toggle('hidden', !me.isAdmin);
+  }
+  if (me.isAdmin) { loadAdminUsers(); loadAdminPatientList(); }
+}
+
+// Laedt alle Patienten in das Zielpatient-Dropdown der klinischen Daten.
+async function loadAdminPatientList() {
+  const select = $('#nc-patient');
+  if (!select) return;
+  try {
+    const res = await fetch('/api/admin/patients');
+    if (!res.ok) return;
+    const { patients } = await res.json();
+    select.innerHTML = (patients || [])
+      .map((p) => `<option value="${p.id}">${escapeHtml(p.label)}</option>`)
+      .join('');
+  } catch { /* ignore */ }
+  loadAdminClinical();
+}
+
+// Laedt die vorhandenen klinischen Eintraege des aktuell gewaehlten Zielpatienten
+// mit Loeschen-Button.
+async function loadAdminClinical() {
+  const host = $('#admin-clinical-list');
+  if (!host) return;
+  const patientId = $('#nc-patient')?.value;
+  if (!patientId) { host.innerHTML = '<div class="placeholder">Kein Patient ausgewählt.</div>'; return; }
+  host.innerHTML = '<div class="placeholder">Lade Einträge…</div>';
+  try {
+    const res = await fetch(`/api/admin/clinical?patientId=${encodeURIComponent(patientId)}`);
+    if (!res.ok) { host.innerHTML = '<div class="denied-box">Einträge konnten nicht geladen werden.</div>'; return; }
+    const { items } = await res.json();
+    if (!items || items.length === 0) { host.innerHTML = '<div class="placeholder">Keine klinischen Einträge für diesen Patienten.</div>'; return; }
+    host.innerHTML = items.map((i) => `
+      <div class="admin-user-row">
+        <div class="admin-user-info">
+          <span class="admin-user-name">${escapeHtml(i.label)}</span>
+          <span class="tag">${escapeHtml(i.type)}/${escapeHtml(i.id)}</span>
+        </div>
+        <button class="btn-danger" data-del-clinical="${escapeHtml(i.type)}/${escapeHtml(i.id)}" data-del-label="${escapeHtml(i.label)}">Löschen</button>
+      </div>`).join('');
+  } catch {
+    host.innerHTML = '<div class="denied-box">Fehler beim Laden der Einträge.</div>';
+  }
+}
+
+const ROLE_LABEL = { Patient: 'Patient', Doctor: 'Arzt', Administrator: 'Administrator' };
+
+// Laedt die Benutzerverwaltung: alle Patienten + Aerzte mit Loeschen-Button (Admin geschuetzt).
+async function loadAdminUsers() {
+  const host = $('#admin-users-list');
+  if (!host) return;
+  host.innerHTML = '<div class="placeholder">Lade Benutzer…</div>';
+  try {
+    const res = await fetch('/api/admin/users');
+    if (!res.ok) { host.innerHTML = '<div class="denied-box">Benutzer konnten nicht geladen werden.</div>'; return; }
+    const { users } = await res.json();
+    if (!users || users.length === 0) { host.innerHTML = '<div class="placeholder">Noch keine Benutzer angelegt.</div>'; return; }
+    host.innerHTML = users.map((u) => `
+      <div class="admin-user-row">
+        <div class="admin-user-info">
+          <span class="admin-user-name">${escapeHtml(u.name)}</span>
+          <span class="tag">${escapeHtml(u.username)}</span>
+          <span class="badge badge-${u.role}">${ROLE_LABEL[u.role] || u.role}</span>
+          ${u.patientId ? `<span class="tag">Patient/${u.patientId}</span>` : ''}
+        </div>
+        ${u.deletable
+          ? `<button class="btn-danger" data-del-user="${u.id}" data-del-name="${escapeHtml(u.username)}">Löschen</button>`
+          : '<span class="admin-user-protected">geschützt</span>'}
+      </div>`).join('');
+  } catch {
+    host.innerHTML = '<div class="denied-box">Fehler beim Laden der Benutzer.</div>';
+  }
 }
 
 // Richtet den Patientenkontext ein. Rollenagnostisch:
@@ -398,6 +483,133 @@ $('#access-doctors').addEventListener('change', async (e) => {
     el.checked = !el.checked; // bei Fehler zuruecksetzen
   } finally {
     el.disabled = false;
+  }
+});
+
+// Generischer Submit fuer die Admin-Formulare: POST an <url>, Button-/Status-Handling,
+// Erfolgsmeldung via successMsg(data). Bei { warning } wird eine Warnung angezeigt.
+async function submitAdminForm(form, msgEl, url, body, successMsg) {
+  const btn = form.querySelector('button[type="submit"]');
+  const label = btn.textContent;
+  msgEl.textContent = '';
+  msgEl.className = 'admin-msg';
+  btn.disabled = true;
+  btn.textContent = 'Anlegen…';
+  try {
+    const res = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Anlegen fehlgeschlagen');
+    if (data.warning) {
+      msgEl.textContent = `⚠ ${data.warning}`;
+      msgEl.classList.add('err');
+    } else {
+      msgEl.textContent = successMsg(data);
+      msgEl.classList.add('ok');
+      form.reset();
+    }
+    return data;
+  } catch (err) {
+    msgEl.textContent = err.message;
+    msgEl.classList.add('err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+// Admin: neuen Benutzer (Patient oder Arzt) anlegen — ein Formular mit Rollen-Auswahl.
+$('#admin-add-user')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const role = $('#nu-role').value;
+  const body = {
+    role,
+    username: $('#nu-username').value.trim(),
+    password: $('#nu-password').value,
+    firstName: $('#nu-firstname').value.trim(),
+    lastName: $('#nu-lastname').value.trim(),
+    gender: $('#nu-gender').value || undefined,
+    birthDate: $('#nu-birthdate').value || undefined,
+  };
+  const roleWord = role === 'doctor' ? 'Arzt' : 'Patient';
+  const data = await submitAdminForm(e.target, $('#nu-msg'), '/api/admin/users', body,
+    (d) => `✓ ${roleWord} angelegt: ${body.username} → Patient/${d.patientId}`);
+  if (data && !data.warning) { loadAdminUsers(); loadAdminPatientList(); }
+});
+
+// Admin: Benutzer löschen (Event-Delegation über die Liste).
+$('#admin-users-list')?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-del-user]');
+  if (!btn) return;
+  const userId = btn.dataset.delUser;
+  const name = btn.dataset.delName;
+  if (!confirm(`Benutzer "${name}" wirklich vollständig löschen?\n\nLogin, FHIR-Datensatz, klinische Daten und alle Freigaben werden entfernt. Das kann nicht rückgängig gemacht werden.`)) return;
+  btn.disabled = true;
+  btn.textContent = 'Löschen…';
+  try {
+    const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error || 'Löschen fehlgeschlagen'); btn.disabled = false; btn.textContent = 'Löschen'; return; }
+    if (data.warnings?.length) console.warn('Löschen mit Warnungen:', data.warnings);
+    loadAdminUsers();
+    loadAdminPatientList();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Löschen';
+  }
+});
+
+// Kategorie-Feld nur bei Diagnose (Condition) zeigen.
+$('#nc-type')?.addEventListener('change', (e) => {
+  $('#nc-cat-wrap')?.classList.toggle('hidden', e.target.value !== 'Condition');
+});
+
+// Zielpatient gewechselt -> vorhandene klinische Eintraege neu laden.
+$('#nc-patient')?.addEventListener('change', loadAdminClinical);
+
+// Admin: klinische Daten (Condition/MedicationStatement/AllergyIntolerance) anlegen
+$('#admin-add-clinical')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const resourceType = $('#nc-type').value;
+  const body = {
+    patientId: $('#nc-patient').value,
+    resourceType,
+    text: $('#nc-text').value.trim(),
+    ...(resourceType === 'Condition' ? { category: $('#nc-category').value } : {}),
+  };
+  const patientId = body.patientId;
+  const data = await submitAdminForm(e.target, $('#nc-msg'), '/api/admin/clinical', body,
+    (d) => `✓ ${resourceType}/${d.id} für Patient/${d.patientId} angelegt`);
+  if (data && !data.warning) {
+    // form.reset() setzt das Patient-Dropdown zurueck -> gewaehlten Patienten wiederherstellen,
+    // damit die Liste denselben Patienten zeigt und der naechste Eintrag dort landet.
+    const sel = $('#nc-patient');
+    if (sel) sel.value = patientId;
+    loadAdminClinical();
+  }
+});
+
+// Admin: einzelne klinische Ressource loeschen (Event-Delegation ueber die Liste).
+$('#admin-clinical-list')?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-del-clinical]');
+  if (!btn) return;
+  const ref = btn.dataset.delClinical;          // "Type/id"
+  const label = btn.dataset.delLabel;
+  if (!confirm(`Eintrag "${label}" (${ref}) wirklich löschen?\n\nDas kann nicht rückgängig gemacht werden.`)) return;
+  btn.disabled = true;
+  btn.textContent = 'Löschen…';
+  try {
+    const res = await fetch(`/api/admin/clinical/${ref}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error || 'Löschen fehlgeschlagen'); btn.disabled = false; btn.textContent = 'Löschen'; return; }
+    loadAdminClinical();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Löschen';
   }
 });
 
