@@ -20,7 +20,7 @@ services:
 
   # Keycloak Authorization Server
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.6.3
     container_name: keycloak-uma
     command: start-dev --features=preview --import-realm
     restart: always
@@ -84,6 +84,25 @@ services:
       - "8081:8081"
     extra_hosts:
       - "localhost:host-gateway"
+
+  # UMA Demo Frontend (Node/Express Proxy + statisches UI)
+  uma-frontend:
+    build: ../frontend
+    container_name: uma-frontend
+    restart: on-failure
+    depends_on:
+      keycloak:
+        condition: service_started
+      hapi-fhir-jpaserver-start:
+        condition: service_started
+    environment:
+      # Container-interne Hostnamen statt localhost
+      KEYCLOAK_URL: "http://keycloak:8080"
+      FHIR_URL: "http://hapi-fhir-jpaserver-start:8081/fhir"
+      CLIENT_SECRET: "QYYAosQ6jdouA5NaHp9f5nvE0gIXAIeP"
+      PORT: "3000"
+    ports:
+      - "3000:3000"
 
 volumes:
   hapi-fhir-postgres:
