@@ -1,173 +1,177 @@
-# Setup-Anleitung: UMA-geschützter FHIR-Server auf einer neuen Maschine
+# Setup Guide: UMA-Protected FHIR Server on a Fresh Machine
 
-Diese Anleitung beschreibt, wie der komplette Stack (HAPI FHIR + Keycloak + Demo-Frontend)
-auf einer frischen Maschine eingerichtet wird, inkl. Keycloak-Realm und Demo-Daten.
+This guide describes how to bring up the complete stack (HAPI FHIR + Keycloak + demo frontend)
+on a fresh machine, including the Keycloak realm and demo data.
 
-> Plattform-Hinweis: Die Hilfsskripte liegen als **PowerShell** (`.ps1`) vor. Auf
-> Linux/macOS lassen sie sich mit `pwsh` ausführen oder die enthaltenen `curl`-Aufrufe
-> manuell nachvollziehen (siehe `keycloak-config/curl-testing-commands.md`).
+> Platform note: the helper scripts are provided as **PowerShell** (`.ps1`). On Linux/macOS run
+> them with `pwsh`, or reproduce the underlying `curl` calls manually (see the direct UMA flow
+> example in [documentation/ARCHITECTURE.md](documentation/ARCHITECTURE.md#7-api-reference)).
 
 ---
 
-## 1. Voraussetzungen
+## 1. Prerequisites
 
-- **Docker** + **Docker Compose** (Daemon läuft)
-- **PowerShell** (Windows) oder **pwsh** (Linux/macOS) für die Setup-/Seed-Skripte
-- Freie Ports: `8080` (Keycloak), `8081` (HAPI FHIR), `3000` (Frontend),
+- **Docker** + **Docker Compose** (daemon running)
+- **PowerShell** (Windows) or **pwsh** (Linux/macOS) — only needed for the optional bare-realm fallback script
+- Free ports: `8080` (Keycloak), `8081` (HAPI FHIR), `3000` (frontend),
   `5432`/`5433` (PostgreSQL)
 
-> **Keycloak-Version (wichtig):** Das Compose pinnt das Image bewusst auf
-> `quay.io/keycloak/keycloak:26.6.3`. Der Realm-Export (`fhir-auth-realm-export.json`)
-> wurde mit dieser Version erzeugt (`"keycloakVersion": "26.6.3"`). Eine **ältere**
-> Keycloak-Version bricht den Import mit `Unrecognized field "..."` ab (z.B.
-> `scimApiEnabled`, `maxSecondaryAuthFailures`). Wird die Version angehoben, den Image-Tag
-> an die `keycloakVersion` im Export anpassen — **nicht** `:latest` verwenden, da der
-> `latest`-Stand älter als der Export sein kann.
+> **Keycloak version (important):** the Compose file intentionally pins the image to
+> `quay.io/keycloak/keycloak:26.6.3`. The realm export (`fhir-auth-realm-export.json`) was
+> produced with this version (`"keycloakVersion": "26.6.3"`). An **older** Keycloak version
+> aborts the import with `Unrecognized field "..."` (e.g. `scimApiEnabled`,
+> `maxSecondaryAuthFailures`). If you bump the version, align the image tag with the
+> `keycloakVersion` in the export — do **not** use `:latest`, because the `latest` build can be
+> older than the export.
 
 ---
 
-## 2. Stack starten
+## 2. Start the Stack
 
-Im Verzeichnis `hapi-jpa/`:
+In the `hapi-jpa/` directory:
 
 ```bash
 docker compose up -d --build
 ```
 
-Das startet fünf Container:
+This starts five containers:
 
-| Service | Container | Port | Zugang |
+| Service | Container | Port | Access |
 |---|---|---|---|
 | Keycloak | `keycloak-uma` | 8080 | admin / admin |
 | HAPI FHIR | `hapi-fhir-jpaserver-start` | 8081 | — |
-| Keycloak-DB | `keycloak-postgres` | 5433 | keycloak / keycloak |
-| HAPI-DB | `hapi-fhir-postgres` | 5432 | admin / admin |
+| Keycloak DB | `keycloak-postgres` | 5433 | keycloak / keycloak |
+| HAPI DB | `hapi-fhir-postgres` | 5432 | admin / admin |
 | Frontend | `uma-frontend` | 3000 | — |
 
-Keycloak importiert beim ersten Start automatisch den Realm aus dem gemounteten Ordner
-`keycloak-config/keycloak-files/`. Dort darf **genau eine** Realm-Datei liegen
-(`fhir-auth-realm-export.json`); `--import-realm` würde sonst mehrere Realms importieren und
-es käme zu Konflikten.
+On first start Keycloak automatically imports the realm from the mounted folder
+`keycloak-config/keycloak-files/`. That folder must contain **exactly one** realm file
+(`fhir-auth-realm-export.json`); otherwise `--import-realm` would import multiple realms and
+cause conflicts.
 
-> **Was der Import enthält — und was nicht:** Der Export liefert den Grund-Realm: Users
-> (alice, bernd, clara, dr.bob, dr.smith, jan), Rollen, den Client `fhir-client` (Secret,
-> `uma_protection`), die 5 SMART-v2-Scopes, die Role-/User-Policies und Decision Strategy
-> AFFIRMATIVE. Er enthält **bewusst KEINE** Patient-Ressourcen und **keine** scope-Permissions
-> — diese referenzieren user-owned UMA-Ressourcen, die sich über den Realm-Import nicht
-> zuverlässig wiederherstellen lassen (Keycloak: *"Resource [Patient/1] … not owned by the
-> resource server"*). Sie entstehen stattdessen zur Laufzeit in Schritt 4. Die Schritte 3+4
-> sind daher **Pflicht**, kein optionaler Fallback.
+> **What the import contains — and what it does not:** the export provides the base realm and a
+> **single user, the administrator** (`admin` / `admin123`, role `Administrator`), the `fhir-client`
+> client (secret, `uma_protection`), the 5 SMART-v2 scopes, `RolePolicy-Doctor`, and Decision
+> Strategy AFFIRMATIVE. It **deliberately contains NO** patients, doctors, Patient resources, or
+> scope permissions — those reference user-owned UMA resources that cannot be reliably restored via
+> a realm import (Keycloak: *"Resource [Patient/1] … not owned by the resource server"*). Patients
+> and doctors are instead created at runtime through the **admin panels** (step 4), which also
+> registers the FHIR resources and their owner permissions automatically.
 
 ---
 
-## 3. Auf Bereitschaft warten
+## 3. Wait for Readiness
 
 ```bash
-# Keycloak-Realm erreichbar?
+# Keycloak realm reachable?
 curl -s http://localhost:8080/realms/FHIR-Auth/.well-known/uma2-configuration
-# HAPI erreichbar? (kann 1-2 Minuten dauern)
+# HAPI reachable? (can take 1-2 minutes)
 curl -s http://localhost:8081/fhir/metadata
 ```
 
-> **Wichtig — Reihenfolge HAPI ↔ Keycloak:** HAPI baut beim Start seinen Keycloak-Admin-Client
-> auf (um Patient-Ressourcen registrieren zu können). `depends_on` wartet nur darauf, dass der
-> Keycloak-**Container** läuft, **nicht** darauf, dass Keycloak den Realm fertig importiert hat
-> und bereit ist. Startet HAPI, bevor Keycloak antwortet, bleibt der Client uninitialisiert und
-> das spätere Seeden registriert die Patienten **nicht** (HAPI-Log:
-> `Failed to register resource Patient/1: … templateValues entry was null`).
+> **Important — HAPI ↔ Keycloak ordering:** on startup HAPI builds its Keycloak admin client (so
+> it can register Patient resources). `depends_on` only waits for the Keycloak **container** to
+> run, **not** for Keycloak to have finished importing the realm and be ready. If HAPI starts
+> before Keycloak answers, the client stays uninitialized and creating a patient later fails to
+> register the FHIR resource in Keycloak (HAPI log: `Failed to register resource Patient/…: …
+> templateValues entry was null`).
 >
-> **Workaround:** Sobald Keycloak antwortet (`uma2-configuration` liefert 200), HAPI einmal
-> neu starten, **bevor** geseedet wird:
+> **Workaround:** once Keycloak answers (`uma2-configuration` returns 200), restart HAPI once
+> **before** creating any patients:
 > ```bash
 > docker compose restart hapi-fhir-jpaserver-start
 > ```
-> Erfolg prüfen:
+> Verify success:
 > ```bash
 > docker logs hapi-fhir-jpaserver-start | grep "KeycloakResourceService initialized successfully"
 > ```
 
 ---
 
-## 4. Demo-Daten + Autorisierung aufbauen (Pflicht)
+## 4. Create & Manage Patients / Doctors (admin panel)
 
-Die HAPI-Datenbank startet **leer**. Diese beiden Skripte legen die Patienten an und bauen die
-Permissions auf den dabei registrierten Ressourcen auf:
+The HAPI database starts **empty** and the realm has only the administrator. You add patients,
+doctors, and clinical data at runtime through the admin panels — no seed script. Logging in as a
+pure administrator shows **only** the management panels (no patient data view):
 
-```powershell
-cd keycloak-config
-.\seed-fhir-data.ps1          # Patienten alice/bernd/clara + klinische Ressourcen
-.\setup-smart-v2-authz.ps1    # scope-Permissions auf die nun registrierten Patient/<id>
-```
+1. Open **http://localhost:3000** and log in as **admin / admin123**.
+2. **Add patient** — enter username, password, name (gender/birth date optional). This creates a
+   Keycloak login (role `Patient`), a linked FHIR `Patient` record, and full owner access to that
+   record.
+3. **Add doctor** — same form; creates a login with roles `Doctor` + `Patient` and an own FHIR
+   record, so the doctor also has a personal patient record.
+4. **Add clinical data** — pick a patient and add a Condition, MedicationStatement, or
+   AllergyIntolerance.
 
-`seed-fhir-data.ps1` legt die drei Patienten (Alice → Patient/1, Bernd → Patient/7,
-Clara → Patient/11) und ihre klinischen Ressourcen per FHIR-POST an. Die FHIR-IDs 1/7/11
-ergeben sich aus der Anlagereihenfolge auf einer leeren DB. Jeder neue Patient wird vom
-`ResourceRegistrationInterceptor` automatisch als UMA-Ressource in Keycloak registriert
-(Owner = Keycloak-UUID des Patienten, zur Laufzeit aufgelöst — nicht hartkodiert).
+Under the hood each new patient/doctor is registered as a UMA resource in Keycloak by the
+`ResourceRegistrationInterceptor` (owner = the user's Keycloak UUID), and the proxy sets
+`ownerManagedAccess=false` plus the `Permission-Patient<id>-Owner-Full` scope permission so the
+owner can immediately read their own data. FHIR IDs are assigned in creation order.
 
-`setup-smart-v2-authz.ps1` ist idempotent und legt auf den registrierten Patient-Ressourcen die
-scope-Permissions an (Owner-Vollzugriff + die Arzt-Freigaben gemäß Demo-Szenario), setzt
-`uma_protection` als Default-Scope und Decision Strategy AFFIRMATIVE. Mit `-CleanupLegacy`
-entfernt es zusätzlich Altobjekte aus früheren Importen.
+5. **Manage users** — the "Benutzer verwalten" panel lists every patient and doctor and lets you
+   delete one (removing its login, FHIR record, clinical data, and all sharing grants in one step).
+   Administrators and your own account are protected from deletion.
 
-> **Reihenfolge seed → setup:** `setup-smart-v2-authz.ps1` verarbeitet nur Patient-Ressourcen,
-> die bereits in Keycloak registriert sind — die entstehen erst beim Seeden. Läuft setup vor dem
-> Seed, meldet es „Noch keine Patient/<id>-Ressourcen registriert" und legt keine Permissions an.
-> (Die Patienten-User bernd/clara sind im Export bereits enthalten; das Skript legt sie nur an,
-> falls sie fehlen.)
+> **Prefer the API?** The same actions are available on the frontend proxy (admin session required):
+> `POST /api/admin/users` (`role:'patient'|'doctor'`), `POST /api/admin/clinical`,
+> `GET /api/admin/users`, and `DELETE /api/admin/users/:userId`. See
+> [ARCHITECTURE.md](documentation/ARCHITECTURE.md#7-api-reference) for the request bodies.
+
+> **Bare-realm fallback:** the SMART/UMA infrastructure (scopes, `RolePolicy-Doctor`,
+> `uma_protection`, decision strategy) ships inside the realm export. Only if you import a bare
+> realm without it, run `keycloak-config/setup-smart-v2-authz.ps1` once to rebuild it — it creates
+> **no** users or patient permissions.
 
 ---
 
-## 5. Verifikation
+## 5. Verification
 
-> Hinweis: Das in früheren Ständen erwähnte `test-uma-flow.ps1` ist auf diesem Branch nicht mehr
-> vorhanden. Der volle UMA-Flow lässt sich am einfachsten über den **Frontend-Proxy** prüfen, der
-> den UMA-Dance (Access Token → 401 + Permission Ticket → RPT → Zugriff) serverseitig durchführt.
+> Note: the `test-uma-flow.ps1` mentioned in earlier states is no longer present on this branch.
+> The easiest way to check the full UMA flow is through the **frontend proxy**, which performs the
+> UMA dance (access token → 401 + permission ticket → RPT → access) server-side.
+
+First create a patient in the admin panel (step 4), e.g. `dora` / `dora123` → say it becomes
+`Patient/153`. Then verify owner access through the proxy:
 
 ```bash
-# Login (Session-Cookie -> cj.txt), danach FHIR-Zugriff über den Proxy (alice = Owner):
+# Login (session cookie -> cj.txt), then FHIR access through the proxy (dora = owner):
 curl -s -c cj.txt -X POST http://localhost:3000/api/login \
-  -H "Content-Type: application/json" -d '{"username":"alice","password":"alice123"}'
-curl -s -b cj.txt -o NUL -w "%{http_code}\n" http://localhost:3000/api/fhir/Patient/1   # -> 200
+  -H "Content-Type: application/json" -d '{"username":"dora","password":"dora123"}'
+curl -s -b cj.txt -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/fhir/Patient/153   # -> 200
 ```
 
-**Owner-Zugriff** (immer verfügbar, jeder Patient auf sich selbst):
+**Owner access** (always available, every patient on their own record):
 
-| User | Pfad | Status | Grund |
+| User | Path | Status | Reason |
 |---|---|---|---|
-| alice | `Patient/1` | **200** | Owner, Vollzugriff |
-| bernd | `Patient/7` | **200** | Owner von Patient/7 |
-| bernd | `Patient/1` | **403** | kein Zugriff auf fremden Patienten |
-| clara | `Patient/11` | **200** | Owner von Patient/11 |
+| dora | `Patient/153` (own) | **200** | owner, full access |
+| dora | a foreign `Patient/<id>` | **403** | no access to another patient |
 
-**Arzt-Zugriff** ist standardmäßig **leer** — er entsteht erst, wenn der Patient ihn im Frontend
-freigibt (Sicht „Als Patient" → „Zugriffsverwaltung"). Beispiel nach Freigabe „Diagnosen" durch alice:
+**Doctor access** is **empty by default** — it only appears once the patient grants it in the
+frontend ("Als Patient" view → access management). After the patient grants "Diagnoses" to a
+doctor, that doctor's `Condition?patient=<id>` goes from **403** to **200**, while the
+demographics (`Patient/<id>`) stay denied until "Patient data" is granted too.
 
-| User | Pfad | vor Freigabe | nach Freigabe |
-|---|---|---|---|
-| dr.smith | `Condition?patient=1` | **403** | **200** |
-| dr.smith | `Patient/1` (Stammdaten) | **403** | weiterhin **401/403**, solange „Stammdaten" nicht freigegeben |
-
-Oder im Browser: **http://localhost:3000** — Login als alice/bernd/clara oder dr.smith/dr.bob.
-In der „Als Patient"-Sicht erscheint die **Zugriffsverwaltung**, in der der Patient pro Arzt
-Lese-Scopes freigibt und einzelne Einträge sperrt. Die UMA-Schritte/RPT-Scopes bleiben sichtbar.
+Or in the browser: **http://localhost:3000** — log in as a patient or doctor you created. In the
+"Als Patient" view the **access management** panel appears, where the patient grants read scopes
+per doctor and blocks individual records. The UMA steps / RPT scopes stay visible.
 
 ---
 
-## 6. Bekannte Probleme & Lösungen
+## 6. Known Issues & Fixes
 
-| Problem | Ursache | Lösung |
+| Problem | Cause | Fix |
 |---|---|---|
-| Keycloak-Crashloop, `Unrecognized field "..."` beim Import | Image-Version älter als die `keycloakVersion` im Export | Image-Tag an den Export anpassen (aktuell `26.6.3`), **nicht** `:latest` |
-| Keycloak-Crashloop, `Resource … [Patient/1] … not owned by the resource server` | user-owned UMA-Ressourcen + scope-Permissions im Realm-Export sind nicht re-importierbar | aus dem Export entfernen, zur Laufzeit über seed + `setup-smart-v2-authz.ps1` aufbauen (die mitgelieferte Datei ist bereits so zugeschnitten) |
-| Seed registriert keine Patienten, HAPI-Log `templateValues entry was null` | HAPI startete, bevor Keycloak bereit war → Keycloak-Client uninitialisiert | HAPI nach Keycloak-Bereitschaft neu starten, **dann** seeden (siehe Schritt 3) |
-| `setup-smart-v2-authz.ps1`: „Noch keine Patient/<id>-Ressourcen registriert" | Seed noch nicht gelaufen | zuerst `seed-fhir-data.ps1`, dann setup erneut |
-| Mehrere Realm-Dateien im Import-Ordner | `--import-realm` importiert alle JSONs → Konflikt/falscher Realm gewinnt | nur `fhir-auth-realm-export.json` im Ordner lassen |
-| `access_denied: request_submitted` | `ownerManagedAccess=true` auf der Ressource | per Admin-API auf `false` setzen (macht `setup-smart-v2-authz.ps1`) |
+| Keycloak crash loop, `Unrecognized field "..."` on import | image version older than the `keycloakVersion` in the export | align the image tag with the export (currently `26.6.3`), **not** `:latest` |
+| Keycloak crash loop, `Resource … [Patient/1] … not owned by the resource server` | user-owned UMA resources + scope permissions in the realm export are not re-importable | keep them out of the export and build them at runtime via the admin panel (the shipped file is already trimmed this way) |
+| Creating a patient fails to register in Keycloak, HAPI log `templateValues entry was null` | HAPI started before Keycloak was ready → Keycloak client uninitialized | restart HAPI after Keycloak is ready, **then** create patients (see step 3) |
+| New patient sees "Kein Zugriff" on their own data | owner permission was not created (e.g. Keycloak unreachable during creation) | delete the half-created Keycloak user and re-create the patient via the admin panel |
+| Multiple realm files in the import folder | `--import-realm` imports all JSONs → conflict / wrong realm wins | keep only `fhir-auth-realm-export.json` in the folder |
+| `access_denied: request_submitted` | `ownerManagedAccess=true` on the resource | set it to `false` via the Admin API (the admin panel does this automatically when creating a patient/doctor) |
 
 ---
 
-## 7. Realm neu exportieren (nach Konfigurationsänderungen)
+## 7. Re-Export the Realm (after config changes)
 
 ```bash
 docker exec keycloak-uma /opt/keycloak/bin/kc.sh export \
@@ -176,23 +180,36 @@ docker cp keycloak-uma:/tmp/realm-export/FHIR-Auth-realm.json \
   ./keycloak-config/keycloak-files/fhir-auth-realm-export.json
 ```
 
-> **Achtung — vor dem Wiederverwenden als Import-Datei aufräumen:** Ein frischer Export enthält
-> die zur Laufzeit angelegten **user-owned Patient-Ressourcen + scope-Permissions** wieder — und
-> genau die lassen sich nicht re-importieren (siehe Schritt 6). Daher in der exportierten Datei
-> beim Client `fhir-client` die `authorizationSettings.resources` leeren und die Policies vom
-> Typ `scope` entfernen (Role-/User-Policies und Scopes bleiben erhalten). Diese Objekte werden
-> in Schritt 4 ohnehin neu erzeugt. Eine script-basierte Policy (`script-owner-policy.js`) würde
-> den Export zudem mit `providerFactory is null` scheitern lassen — diese Altlast vorher entfernen.
+> **Caution — clean up before reusing it as an import file:** a fresh export again contains the
+> runtime-created **user-owned Patient resources + scope permissions** — and exactly those cannot
+> be re-imported (see step 6). So in the exported file, under the `fhir-client` client, clear
+> `authorizationSettings.resources` and remove the policies of type `scope` (role/user policies
+> and scopes stay). Those objects are recreated in step 4 anyway. A script-based policy
+> (`script-owner-policy.js`) would additionally fail the export with `providerFactory is null` —
+> remove that legacy artifact beforehand.
 
 ---
 
-## 8. Zurücksetzen
+## 8. Reset
 
 ```bash
 cd hapi-jpa
-docker compose down            # Container stoppen, Volumes bleiben
-docker compose down -v         # Container UND Volumes löschen (kompletter Reset)
+docker compose down            # stop containers, keep volumes
+docker compose down -v         # delete containers AND volumes (full reset)
 ```
 
-Nach `down -v` startet alles frisch: Keycloak importiert den Realm neu, die HAPI-DB ist leer →
-Schritte 3-4 erneut ausführen (inkl. HAPI-Neustart vor dem Seed).
+After `down -v` everything starts fresh: Keycloak re-imports the realm (only the `admin` user),
+the HAPI DB is empty → run steps 3-4 again (HAPI restart once Keycloak is ready, then create
+patients/doctors via the admin panel).
+
+---
+
+## 9. Run Locally (without Docker)
+
+```bash
+cd hapi-jpa
+mvn clean spring-boot:run        # serves http://localhost:8081/fhir
+```
+
+For local runs, point `uma.authorization-server-uri` / `keycloak.auth-server-url` in
+`application.yaml` at `http://localhost:8080` instead of `http://keycloak:8080`.
